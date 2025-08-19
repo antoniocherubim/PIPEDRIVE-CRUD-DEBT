@@ -97,6 +97,55 @@ class PipedriveGUI:
         )
         auto_find_btn.pack(side="left", pady=10)
         
+        # Frame para planilhas Garantinorte
+        garantinorte_frame = ctk.CTkFrame(tab)
+        garantinorte_frame.pack(fill="x", padx=20, pady=10)
+        
+        ctk.CTkLabel(garantinorte_frame, text="Planilhas Garantinorte:", font=ctk.CTkFont(size=16)).pack(anchor="w", padx=10, pady=(10, 5))
+        
+        garantinorte_buttons_frame = ctk.CTkFrame(garantinorte_frame)
+        garantinorte_buttons_frame.pack(fill="x", padx=10, pady=(0, 10))
+        
+        add_garantinorte_btn = ctk.CTkButton(
+            garantinorte_buttons_frame,
+            text="📊 Adicionar Planilha Garantinorte",
+            command=self.add_garantinorte_file,
+            width=200,
+            height=35,
+            fg_color="orange",
+            hover_color="darkorange"
+        )
+        add_garantinorte_btn.pack(side="left", padx=(10, 10), pady=10)
+        
+        open_garantinorte_folder_btn = ctk.CTkButton(
+            garantinorte_buttons_frame,
+            text="📁 Abrir Pasta Garantinorte",
+            command=self.open_garantinorte_folder,
+            width=180,
+            height=35
+        )
+        open_garantinorte_folder_btn.pack(side="left", padx=(0, 10), pady=10)
+        
+        list_garantinorte_btn = ctk.CTkButton(
+            garantinorte_buttons_frame,
+            text="📋 Listar Planilhas",
+            command=self.list_garantinorte_files,
+            width=150,
+            height=35
+        )
+        list_garantinorte_btn.pack(side="left", padx=(0, 10), pady=10)
+        
+        process_garantinorte_btn = ctk.CTkButton(
+            garantinorte_buttons_frame,
+            text="⚙️ Processar Garantinorte",
+            command=self.process_garantinorte_files,
+            width=180,
+            height=35,
+            fg_color="purple",
+            hover_color="darkpurple"
+        )
+        process_garantinorte_btn.pack(side="left", padx=(0, 10), pady=10)
+        
         # Frame de configurações
         config_frame = ctk.CTkFrame(tab)
         config_frame.pack(fill="x", padx=20, pady=10)
@@ -386,6 +435,238 @@ class PipedriveGUI:
                         return
         
         messagebox.showwarning("Aviso", "Nenhum arquivo TXT encontrado automaticamente")
+        
+    def add_garantinorte_file(self):
+        """Adiciona planilha da Garantinorte"""
+        # Abrir diálogo para selecionar arquivo
+        filename = filedialog.askopenfilename(
+            title="Selecionar Planilha Garantinorte",
+            filetypes=[
+                ("Planilhas Excel", "*.xlsx *.xls"),
+                ("Arquivos CSV", "*.csv"),
+                ("Todos os arquivos", "*.*")
+            ]
+        )
+        
+        if filename:
+            try:
+                # Criar pasta se não existir
+                garantinorte_dir = "input/garantinorte"
+                if not os.path.exists(garantinorte_dir):
+                    os.makedirs(garantinorte_dir)
+                
+                # Copiar arquivo para a pasta
+                import shutil
+                dest_path = os.path.join(garantinorte_dir, os.path.basename(filename))
+                shutil.copy2(filename, dest_path)
+                
+                self.log_message(f"Planilha Garantinorte adicionada: {dest_path}")
+                messagebox.showinfo(
+                    "Sucesso", 
+                    f"Planilha adicionada com sucesso!\n\nArquivo: {os.path.basename(filename)}\nDestino: {dest_path}"
+                )
+                
+            except Exception as e:
+                self.log_message(f"Erro ao adicionar planilha: {e}")
+                messagebox.showerror("Erro", f"Erro ao adicionar planilha: {e}")
+                
+    def open_garantinorte_folder(self):
+        """Abre a pasta de planilhas Garantinorte"""
+        garantinorte_dir = "input/garantinorte"
+        
+        # Criar pasta se não existir
+        if not os.path.exists(garantinorte_dir):
+            os.makedirs(garantinorte_dir)
+        
+        try:
+            # Abrir pasta no explorador de arquivos
+            if os.name == 'nt':  # Windows
+                os.startfile(garantinorte_dir)
+            elif os.name == 'posix':  # macOS e Linux
+                import subprocess
+                subprocess.run(['open', garantinorte_dir])  # macOS
+            else:
+                import subprocess
+                subprocess.run(['xdg-open', garantinorte_dir])  # Linux
+                
+            self.log_message(f"Pasta Garantinorte aberta: {garantinorte_dir}")
+            
+        except Exception as e:
+            self.log_message(f"Erro ao abrir pasta: {e}")
+            messagebox.showerror("Erro", f"Erro ao abrir pasta: {e}")
+            
+    def list_garantinorte_files(self):
+        """Lista as planilhas existentes na pasta Garantinorte"""
+        garantinorte_dir = "input/garantinorte"
+        
+        if not os.path.exists(garantinorte_dir):
+            messagebox.showinfo("Informação", "Pasta Garantinorte não existe ainda. Adicione uma planilha primeiro.")
+            return
+            
+        try:
+            # Listar arquivos na pasta
+            files = [f for f in os.listdir(garantinorte_dir) if os.path.isfile(os.path.join(garantinorte_dir, f))]
+            
+            if not files:
+                messagebox.showinfo("Informação", "Nenhuma planilha encontrada na pasta Garantinorte.")
+                return
+                
+            # Criar janela com lista de arquivos
+            files_window = ctk.CTkToplevel(self.root)
+            files_window.title("Planilhas Garantinorte")
+            files_window.geometry("600x400")
+            
+            # Título
+            title_label = ctk.CTkLabel(
+                files_window,
+                text="📊 Planilhas na Pasta Garantinorte",
+                font=ctk.CTkFont(size=18, weight="bold")
+            )
+            title_label.pack(pady=(20, 10))
+            
+            # Lista de arquivos
+            files_text = ctk.CTkTextbox(files_window, height=250)
+            files_text.pack(fill="both", expand=True, padx=20, pady=(0, 20))
+            
+            # Formatar lista de arquivos
+            files_list = f"Pasta: {os.path.abspath(garantinorte_dir)}\n"
+            files_list += f"Total de arquivos: {len(files)}\n\n"
+            
+            for i, file in enumerate(files, 1):
+                file_path = os.path.join(garantinorte_dir, file)
+                file_size = os.path.getsize(file_path)
+                file_date = datetime.fromtimestamp(os.path.getctime(file_path)).strftime("%d/%m/%Y %H:%M")
+                
+                files_list += f"{i}. {file}\n"
+                files_list += f"   Tamanho: {file_size:,} bytes\n"
+                files_list += f"   Data: {file_date}\n"
+                files_list += f"   Caminho: {file_path}\n\n"
+                
+            files_text.insert("1.0", files_list)
+            
+            # Botão para abrir pasta
+            open_folder_btn = ctk.CTkButton(
+                files_window,
+                text="📁 Abrir Pasta",
+                command=self.open_garantinorte_folder
+            )
+            open_folder_btn.pack(pady=(0, 20))
+            
+        except Exception as e:
+            self.log_message(f"Erro ao listar planilhas: {e}")
+            messagebox.showerror("Erro", f"Erro ao listar planilhas: {e}")
+            
+    def process_garantinorte_files(self):
+        """Processa as planilhas da Garantinorte"""
+        garantinorte_dir = "input/garantinorte"
+        
+        if not os.path.exists(garantinorte_dir):
+            messagebox.showwarning("Aviso", "Pasta Garantinorte não existe. Adicione planilhas primeiro.")
+            return
+            
+        # Listar arquivos disponíveis
+        files = [f for f in os.listdir(garantinorte_dir) if os.path.isfile(os.path.join(garantinorte_dir, f))]
+        
+        if not files:
+            messagebox.showwarning("Aviso", "Nenhuma planilha encontrada na pasta Garantinorte.")
+            return
+            
+        # Criar janela de seleção
+        selection_window = ctk.CTkToplevel(self.root)
+        selection_window.title("Processar Planilhas Garantinorte")
+        selection_window.geometry("700x500")
+        
+        # Título
+        title_label = ctk.CTkLabel(
+            selection_window,
+            text="⚙️ Processar Planilhas Garantinorte",
+            font=ctk.CTkFont(size=18, weight="bold")
+        )
+        title_label.pack(pady=(20, 10))
+        
+        # Frame para seleção
+        selection_frame = ctk.CTkFrame(selection_window)
+        selection_frame.pack(fill="both", expand=True, padx=20, pady=(0, 20))
+        
+        ctk.CTkLabel(selection_frame, text="Selecione as planilhas para processar:").pack(anchor="w", padx=10, pady=(10, 5))
+        
+        # Lista de checkboxes para arquivos
+        file_vars = {}
+        for file in files:
+            var = tk.BooleanVar(value=True)  # Por padrão, todos selecionados
+            file_vars[file] = var
+            
+            file_frame = ctk.CTkFrame(selection_frame)
+            file_frame.pack(fill="x", padx=10, pady=2)
+            
+            checkbox = ctk.CTkCheckBox(file_frame, text=file, variable=var)
+            checkbox.pack(side="left", padx=(10, 10), pady=5)
+            
+            # Mostrar informações do arquivo
+            file_path = os.path.join(garantinorte_dir, file)
+            file_size = os.path.getsize(file_path)
+            info_label = ctk.CTkLabel(file_frame, text=f"({file_size:,} bytes)")
+            info_label.pack(side="left", pady=5)
+        
+        # Botões de ação
+        buttons_frame = ctk.CTkFrame(selection_window)
+        buttons_frame.pack(fill="x", padx=20, pady=(0, 20))
+        
+        process_btn = ctk.CTkButton(
+            buttons_frame,
+            text="🚀 Processar Selecionados",
+            command=lambda: self.execute_garantinorte_processing(file_vars, selection_window),
+            fg_color="green",
+            hover_color="darkgreen",
+            width=200
+        )
+        process_btn.pack(side="left", padx=(0, 10), pady=10)
+        
+        cancel_btn = ctk.CTkButton(
+            buttons_frame,
+            text="❌ Cancelar",
+            command=selection_window.destroy,
+            width=120
+        )
+        cancel_btn.pack(side="left", pady=10)
+        
+    def execute_garantinorte_processing(self, file_vars, window):
+        """Executa o processamento das planilhas selecionadas"""
+        # Fechar janela de seleção
+        window.destroy()
+        
+        # Obter arquivos selecionados
+        selected_files = [file for file, var in file_vars.items() if var.get()]
+        
+        if not selected_files:
+            messagebox.showwarning("Aviso", "Nenhuma planilha selecionada.")
+            return
+            
+        # Confirmar processamento
+        confirm = messagebox.askyesno(
+            "Confirmar Processamento",
+            f"Deseja processar {len(selected_files)} planilha(s) da Garantinorte?\n\n"
+            f"Arquivos:\n" + "\n".join(f"• {file}" for file in selected_files)
+        )
+        
+        if not confirm:
+            return
+            
+        # Iniciar processamento
+        self.log_message(f"Iniciando processamento de {len(selected_files)} planilha(s) Garantinorte")
+        
+        # Aqui você implementaria a lógica específica para processar planilhas Garantinorte
+        # Por enquanto, vamos mostrar uma mensagem de sucesso
+        messagebox.showinfo(
+            "Processamento Iniciado",
+            f"Processamento de {len(selected_files)} planilha(s) iniciado!\n\n"
+            f"Esta funcionalidade será implementada para processar especificamente "
+            f"as planilhas da Garantinorte com suas regras de negócio específicas."
+        )
+        
+        # Log das planilhas selecionadas
+        for file in selected_files:
+            self.log_message(f"Planilha selecionada para processamento: {file}")
         
     def start_processing(self):
         """Inicia o processamento"""
