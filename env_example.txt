@@ -1,0 +1,85 @@
+# Configurações do Sistema Pipedrive - Inadimplentes
+# Arquivo de exemplo - Copie para .env e configure
+
+# ========== CONFIGURAÇÕES DA API PIPEDRIVE ==========
+# Token da API (OBRIGATÓRIO - Configure na GUI)
+PIPEDRIVE_API_TOKEN=SEU_TOKEN_AQUI
+
+# Domínio do Pipedrive (exemplo: sicoob-arrudaecorsi)
+PIPEDRIVE_DOMAIN=sicoob-arrudaecorsi
+
+# URLs da API (geradas automaticamente)
+# PIPEDRIVE_BASE_URL_V1=
+# PIPEDRIVE_BASE_URL_V2=
+
+# ID do proprietário padrão (opcional)
+PIPEDRIVE_OWNER_ID=
+
+# ========== CONFIGURAÇÕES DO SISTEMA ==========
+# Nível de log (DEBUG, INFO, WARNING, ERROR)
+LOG_LEVEL=INFO
+
+# Habilitar backup automático SQLite
+BACKUP_ENABLED=true
+
+# Modo de processamento (full, txt-pipedrive, legado)
+PROCESSING_MODE=full
+
+# ========== CONFIGURAÇÕES DE CAMPO ==========
+# IDs dos campos personalizados (configurados automaticamente)
+# Estes IDs são mapeados no arquivo src/custom_fields_config.py
+
+# ========== CONFIGURAÇÕES DE BACKUP ==========
+# Nome padrão do banco SQLite
+DEFAULT_DB_NAME=devedores_backup
+
+# Diretório de backup
+BACKUP_DIR=backup
+
+# ========== CONFIGURAÇÕES DE LOG ==========
+# Diretório de logs
+LOG_DIR=logs
+
+# Formato do timestamp dos logs
+LOG_TIMESTAMP_FORMAT=%Y%m%d_%H%M%S
+
+# ========== CONFIGURAÇÕES DE PROCESSAMENTO ==========
+# Diretório de entrada
+INPUT_DIR=input
+
+# Diretório de saída
+OUTPUT_DIR=output
+
+# Diretório de relatórios
+REPORTS_DIR=relatorios
+
+# ========== CONFIGURAÇÕES DE VALIDAÇÃO ==========
+# Validar CPF/CNPJ antes do processamento
+VALIDATE_DOCUMENTS=true
+
+# Remover zeros à esquerda de documentos
+REMOVE_LEADING_ZEROS=true
+
+# ========== CONFIGURAÇÕES DE API ==========
+# Timeout das requisições (segundos)
+API_TIMEOUT=30
+
+# Número máximo de tentativas
+MAX_RETRIES=3
+
+# Delay entre tentativas (segundos)
+RETRY_DELAY=1
+
+# ========== CONFIGURAÇÕES DE GUI ==========
+# Tema da interface (dark, light, system)
+GUI_THEME=dark
+
+# Tamanho da janela (largura x altura)
+GUI_SIZE=1200x800
+
+# ========== CONFIGURAÇÕES DE DESENVOLVIMENTO ==========
+# Modo debug (true/false)
+DEBUG_MODE=false
+
+# Mostrar logs detalhados
+VERBOSE_LOGGING=false

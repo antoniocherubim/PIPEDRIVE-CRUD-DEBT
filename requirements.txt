@@ -1,0 +1,21 @@
+# API e requisições HTTP
+requests>=2.28.0
+
+# Manipulação de planilhas Excel
+pandas>=1.5.0
+openpyxl>=3.0.0
+
+# Utilitários para data/hora e manipulação de dados
+python-dateutil>=2.8.2
+
+# Logging e configuração
+python-dotenv>=0.19.0
+
+# Interface gráfica moderna
+customtkinter>=5.2.0
+
+# Validação e tipagem (opcional, mas recomendado)
+typing-extensions>=4.0.0
+
+# Nota: SQLite incluído no Python por padrão (módulo sqlite3)
+# Backup automático com banco de dados estruturado 
