@@ -142,7 +142,7 @@ class PipedriveGUI:
             width=180,
             height=35,
             fg_color="purple",
-            hover_color="dark"
+            hover_color="#555555"
         )
         process_garantinorte_btn.pack(side="left", padx=(0, 10), pady=10)
         
