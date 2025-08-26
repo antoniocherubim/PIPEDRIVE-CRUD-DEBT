@@ -142,7 +142,7 @@ class PipedriveGUI:
             width=180,
             height=35,
             fg_color="purple",
-            hover_color="#555555"
+            hover_color="#55555"
         )
         process_garantinorte_btn.pack(side="left", padx=(0, 10), pady=10)
         
@@ -331,6 +331,13 @@ class PipedriveGUI:
             width=120
         ).pack(side="left", padx=(0, 10), pady=10)
         
+        ctk.CTkButton(
+            controls_frame,
+            text="📁 Abrir Pasta Logs",
+            command=self.open_logs_folder,
+            width=120
+        ).pack(side="left", padx=(0, 10), pady=10)
+        
         # Área de logs
         self.logs_text = ctk.CTkTextbox(logs_frame, height=500)
         self.logs_text.pack(fill="both", expand=True, padx=10, pady=(0, 10))
@@ -382,8 +389,23 @@ class PipedriveGUI:
             width=150
         ).pack(side="left", padx=(0, 10))
         
+        # Informações de logging
+        logging_info_frame = ctk.CTkFrame(settings_frame)
+        logging_info_frame.pack(fill="x", padx=10, pady=10)
+        
+        ctk.CTkLabel(logging_info_frame, text="📝 Configurações de Log:", font=ctk.CTkFont(size=14, weight="bold")).pack(anchor="w", padx=10, pady=(10, 5))
+        
+        # Mostrar configurações atuais de logging
+        self.logging_info_text = ctk.CTkTextbox(logging_info_frame, height=100)
+        self.logging_info_text.pack(fill="x", padx=10, pady=(0, 10))
+        
+        # Atualizar informações de logging
+        self.update_logging_info()
+        
     def setup_logging(self):
-        """Configura o sistema de logging"""
+        """Configura o sistema de logging usando as configurações do config.py"""
+        # Usar as configurações padronizadas do config.py
+        self.logger = active_config.setup_logging('gui_main')
         self.update_logs()
         
     def update_logs(self):
@@ -399,9 +421,39 @@ class PipedriveGUI:
         self.root.after(100, self.update_logs)
         
     def log_message(self, message):
-        """Adiciona mensagem ao log"""
+        """Adiciona mensagem ao log usando as configurações do config.py"""
         timestamp = datetime.now().strftime("%H:%M:%S")
-        self.log_queue.put(f"[{timestamp}] {message}")
+        log_entry = f"[{timestamp}] {message}"
+        self.log_queue.put(log_entry)
+        
+        # Também usar o logger configurado se disponível
+        if hasattr(self, 'logger'):
+            self.logger.info(message)
+            
+    def update_logging_info(self):
+        """Atualiza as informações de logging na aba de configuração"""
+        try:
+            if hasattr(self, 'logging_info_text'):
+                info_text = f"Pasta de Logs: {active_config.LOGS_FOLDER}\n"
+                info_text += f"Nível de Log: {active_config.LOG_LEVEL}\n"
+                info_text += f"Logger Ativo: {'Sim' if hasattr(self, 'logger') else 'Não'}\n"
+                
+                # Verificar se a pasta de logs existe
+                if os.path.exists(active_config.LOGS_FOLDER):
+                    log_files = [f for f in os.listdir(active_config.LOGS_FOLDER) if f.endswith('.log')]
+                    info_text += f"Arquivos de Log: {len(log_files)}\n"
+                    if log_files:
+                        latest_log = max(log_files, key=lambda x: os.path.getctime(os.path.join(active_config.LOGS_FOLDER, x)))
+                        info_text += f"Último Log: {latest_log}"
+                else:
+                    info_text += "Pasta de Logs: Não existe"
+                    
+                self.logging_info_text.delete("1.0", "end")
+                self.logging_info_text.insert("1.0", info_text)
+        except Exception as e:
+            if hasattr(self, 'logging_info_text'):
+                self.logging_info_text.delete("1.0", "end")
+                self.logging_info_text.insert("1.0", f"Erro ao carregar informações: {e}")
         
     def browse_file(self):
         """Abre diálogo para selecionar arquivo"""
@@ -932,10 +984,10 @@ class PipedriveGUI:
             messagebox.showerror("Erro", f"Erro ao gerar relatório: {e}")
             
     def refresh_logs(self):
-        """Atualiza logs"""
+        """Atualiza logs usando as configurações do config.py"""
         try:
-            # Buscar arquivos de log
-            logs_dir = "logs"
+            # Usar a pasta de logs configurada no config.py
+            logs_dir = active_config.LOGS_FOLDER
             if os.path.exists(logs_dir):
                 log_files = [f for f in os.listdir(logs_dir) if f.endswith('.log')]
                 if log_files:
@@ -949,21 +1001,53 @@ class PipedriveGUI:
                     self.logs_text.delete("1.0", "end")
                     self.logs_text.insert("1.0", content)
                     self.logs_text.see("end")
+                    
+                    # Log da ação
+                    self.log_message(f"Logs atualizados: {latest_log}")
                 else:
                     self.logs_text.delete("1.0", "end")
                     self.logs_text.insert("1.0", "Nenhum arquivo de log encontrado")
             else:
                 self.logs_text.delete("1.0", "end")
-                self.logs_text.insert("1.0", "Diretório de logs não encontrado")
+                self.logs_text.insert("1.0", f"Diretório de logs não encontrado: {logs_dir}")
                 
         except Exception as e:
             self.logs_text.delete("1.0", "end")
             self.logs_text.insert("1.0", f"Erro ao carregar logs: {e}")
+            self.log_message(f"Erro ao atualizar logs: {e}")
+            
+        # Atualizar informações de logging na aba de configuração
+        self.update_logging_info()
             
     def clear_logs(self):
         """Limpa logs"""
         if messagebox.askyesno("Confirmar", "Deseja limpar os logs?"):
             self.logs_text.delete("1.0", "end")
+            
+    def open_logs_folder(self):
+        """Abre a pasta de logs no explorador de arquivos"""
+        logs_dir = active_config.LOGS_FOLDER
+        
+        # Criar pasta se não existir
+        if not os.path.exists(logs_dir):
+            os.makedirs(logs_dir)
+        
+        try:
+            # Abrir pasta no explorador de arquivos
+            if os.name == 'nt':  # Windows
+                os.startfile(logs_dir)
+            elif os.name == 'posix':  # macOS e Linux
+                import subprocess
+                subprocess.run(['open', logs_dir])  # macOS
+            else:
+                import subprocess
+                subprocess.run(['xdg-open', logs_dir])  # Linux
+                
+            self.log_message(f"Pasta de logs aberta: {logs_dir}")
+            
+        except Exception as e:
+            self.log_message(f"Erro ao abrir pasta de logs: {e}")
+            messagebox.showerror("Erro", f"Erro ao abrir pasta de logs: {e}")
             
     def save_configuration(self):
         """Salva configuração"""

@@ -39,7 +39,7 @@ class Config:
     }
     
     # Configurações de arquivos
-    TXT_INPUT_FOLDER = os.getenv('TXT_INPUT_FOLDER', './input/txt')
+    TXT_INPUT_FOLDER = os.getenv('TXT_INPUT_FOLDER', './input/escritorio_cobranca')
     EXCEL_OUTPUT_FOLDER = os.getenv('EXCEL_OUTPUT_FOLDER', './input/excel')
     GARANTINORTE_FOLDER = os.getenv('GARANTINORTE_FOLDER', './input/garantinorte')
     BACKUP_FOLDER = os.getenv('BACKUP_FOLDER', './backup')
