@@ -11,6 +11,8 @@ import os
 import sys
 from datetime import datetime
 import queue
+import time
+import signal
 
 # Adicionar diretórios ao path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
@@ -35,10 +37,47 @@ class PipedriveGUI:
         self.selected_file = tk.StringVar()
         self.processing = False
         self.log_queue = queue.Queue()
+        self.processing_thread = None
+        self.last_heartbeat = time.time()
+        self.heartbeat_interval = 5.0  # 5 segundos
         
         # Configurar interface
         self.setup_ui()
         self.setup_logging()
+        self.setup_heartbeat()
+        
+        # Configurar tratamento de fechamento
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+        
+    def setup_heartbeat(self):
+        """Configura sistema de heartbeat para detectar travamentos"""
+        def heartbeat_check():
+            if self.processing:
+                current_time = time.time()
+                if current_time - self.last_heartbeat > 30:  # 30 segundos sem atualização
+                    self.log_message("⚠️ ALERTA: Possível travamento detectado!")
+                    self.status_label.configure(text="⚠️ Possível travamento")
+                    
+                # Atualizar progresso
+                if hasattr(self, 'progress_bar'):
+                    current_progress = self.progress_bar.get()
+                    if current_progress < 0.95:  # Não travar em 100%
+                        self.progress_bar.set(current_progress + 0.01)
+                        
+            self.root.after(5000, heartbeat_check)  # Verificar a cada 5 segundos
+            
+        heartbeat_check()
+        
+    def on_closing(self):
+        """Tratamento de fechamento da aplicação"""
+        if self.processing:
+            if messagebox.askyesno("Confirmar Saída", 
+                                 "Processamento em andamento. Deseja realmente sair?"):
+                self.stop_processing()
+                time.sleep(1)  # Aguardar thread parar
+                self.root.destroy()
+        else:
+            self.root.destroy()
         
     def setup_ui(self):
         """Configura a interface principal"""
@@ -142,7 +181,7 @@ class PipedriveGUI:
             width=180,
             height=35,
             fg_color="purple",
-            hover_color="#55555"
+            hover_color="#555555"
         )
         process_garantinorte_btn.pack(side="left", padx=(0, 10), pady=10)
         
@@ -190,6 +229,18 @@ class PipedriveGUI:
             state="disabled"
         )
         self.stop_btn.pack(side="left", padx=(0, 10), pady=10)
+        
+        # Botão de emergência para forçar parada
+        self.emergency_btn = ctk.CTkButton(
+            buttons_frame,
+            text="🚨 EMERGÊNCIA",
+            command=self.emergency_stop,
+            fg_color="#FF4500",
+            hover_color="#FF6347",
+            height=40,
+            state="disabled"
+        )
+        self.emergency_btn.pack(side="left", padx=(0, 10), pady=10)
         
         # Progress bar
         self.progress_bar = ctk.CTkProgressBar(buttons_frame)
@@ -398,6 +449,30 @@ class PipedriveGUI:
         # Mostrar configurações atuais de logging
         self.logging_info_text = ctk.CTkTextbox(logging_info_frame, height=100)
         self.logging_info_text.pack(fill="x", padx=10, pady=(0, 10))
+        
+        # Frame de diagnóstico
+        diagnostic_frame = ctk.CTkFrame(settings_frame)
+        diagnostic_frame.pack(fill="x", padx=10, pady=10)
+        
+        ctk.CTkLabel(diagnostic_frame, text="🔍 Diagnóstico do Sistema:", font=ctk.CTkFont(size=14, weight="bold")).pack(anchor="w", padx=10, pady=(10, 5))
+        
+        # Botões de diagnóstico
+        diagnostic_buttons_frame = ctk.CTkFrame(diagnostic_frame)
+        diagnostic_buttons_frame.pack(fill="x", padx=10, pady=(0, 10))
+        
+        ctk.CTkButton(
+            diagnostic_buttons_frame,
+            text="🔍 Verificar Sistema",
+            command=self.run_system_diagnostic,
+            width=150
+        ).pack(side="left", padx=(0, 10), pady=10)
+        
+        ctk.CTkButton(
+            diagnostic_buttons_frame,
+            text="📊 Status de Memória",
+            command=self.check_memory_status,
+            width=150
+        ).pack(side="left", padx=(0, 10), pady=10)
         
         # Atualizar informações de logging
         self.update_logging_info()
@@ -731,28 +806,57 @@ class PipedriveGUI:
             return
             
         self.processing = True
+        self.last_heartbeat = time.time()  # Reset heartbeat
         self.process_btn.configure(state="disabled")
         self.stop_btn.configure(state="normal")
+        self.emergency_btn.configure(state="normal")
         self.status_label.configure(text="Processando...")
         self.progress_bar.set(0.1)
         
-        # Executar em thread separada
-        thread = threading.Thread(target=self.process_file)
-        thread.daemon = True
-        thread.start()
+        # Executar em thread separada com timeout
+        self.processing_thread = threading.Thread(target=self.process_file)
+        self.processing_thread.daemon = True
+        self.processing_thread.start()
+        
+        # Configurar timeout para o processamento
+        self.root.after(300000, self.check_processing_timeout)  # 5 minutos
         
     def stop_processing(self):
         """Para o processamento"""
         self.processing = False
         self.process_btn.configure(state="normal")
         self.stop_btn.configure(state="disabled")
+        self.emergency_btn.configure(state="disabled")
         self.status_label.configure(text="Processamento interrompido")
         self.progress_bar.set(0)
+        
+        # Aguardar thread terminar se estiver rodando
+        if self.processing_thread and self.processing_thread.is_alive():
+            self.log_message("Aguardando thread de processamento terminar...")
+            self.processing_thread.join(timeout=10)  # Timeout de 10 segundos
+            
+    def check_processing_timeout(self):
+        """Verifica se o processamento está demorando muito"""
+        if self.processing:
+            elapsed_time = time.time() - self.last_heartbeat
+            if elapsed_time > 300:  # 5 minutos
+                self.log_message("⚠️ ALERTA: Processamento demorando mais de 5 minutos!")
+                self.status_label.configure(text="⚠️ Processamento lento")
+                
+                # Perguntar se deseja continuar
+                if messagebox.askyesno("Processamento Lento", 
+                                     f"O processamento está demorando {elapsed_time/60:.1f} minutos.\n"
+                                     "Deseja continuar aguardando?"):
+                    # Resetar timeout
+                    self.root.after(300000, self.check_processing_timeout)
+                else:
+                    self.stop_processing()
         
     def process_file(self):
         """Processa o arquivo em thread separada"""
         try:
             self.log_message("Iniciando processamento...")
+            self.update_heartbeat()
             
             # Configurar processador
             db_name = self.db_name_entry.get() if self.db_name_entry.get() else None
@@ -760,15 +864,17 @@ class PipedriveGUI:
             
             self.progress_bar.set(0.3)
             self.log_message("Processador configurado")
+            self.update_heartbeat()
             
-            # Processar arquivo
-            resultado = processor.process_inadimplentes_from_txt(self.selected_file.get())
+            # Processar arquivo com timeout
+            resultado = self.process_with_timeout(processor, self.selected_file.get())
             
             if not self.processing:  # Verificar se foi interrompido
                 return
                 
             self.progress_bar.set(0.8)
             self.log_message("Processamento concluído")
+            self.update_heartbeat()
             
             # Mostrar resultados
             self.show_processing_results(resultado)
@@ -783,6 +889,144 @@ class PipedriveGUI:
             self.processing = False
             self.process_btn.configure(state="normal")
             self.stop_btn.configure(state="disabled")
+            
+    def update_heartbeat(self):
+        """Atualiza o timestamp do último heartbeat"""
+        self.last_heartbeat = time.time()
+        
+    def process_with_timeout(self, processor, file_path):
+        """Processa arquivo com timeout e atualizações de progresso"""
+        import signal
+        
+        def timeout_handler(signum, frame):
+            raise TimeoutError("Processamento excedeu o tempo limite")
+            
+        # Configurar timeout de 10 minutos
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(600)  # 10 minutos
+        
+        try:
+            # Processar em chunks para evitar travamentos
+            resultado = processor.process_inadimplentes_from_txt(file_path)
+            signal.alarm(0)  # Cancelar alarme
+            return resultado
+            
+        except TimeoutError:
+            signal.alarm(0)
+            raise Exception("Processamento travou por timeout (10 minutos)")
+        except Exception as e:
+            signal.alarm(0)
+            raise e
+            
+    def emergency_stop(self):
+        """Para o processamento de emergência"""
+        if messagebox.askyesno("Parada de Emergência", 
+                              "⚠️ ATENÇÃO: Esta ação irá forçar a parada do processamento!\n\n"
+                              "Isso pode causar perda de dados ou inconsistências.\n"
+                              "Deseja realmente continuar?"):
+            
+            self.log_message("🚨 PARADA DE EMERGÊNCIA ATIVADA!")
+            self.status_label.configure(text="🚨 PARADA DE EMERGÊNCIA")
+            
+            # Forçar parada
+            self.processing = False
+            
+            # Tentar interromper thread
+            if self.processing_thread and self.processing_thread.is_alive():
+                # No Windows, não podemos usar signal, então vamos tentar outras abordagens
+                try:
+                    import _thread
+                    _thread.interrupt_main()
+                except:
+                    pass
+                    
+            # Resetar interface
+            self.process_btn.configure(state="normal")
+            self.stop_btn.configure(state="disabled")
+            self.emergency_btn.configure(state="disabled")
+            self.progress_bar.set(0)
+            
+            messagebox.showwarning("Parada de Emergência", 
+                                 "Processamento interrompido de emergência!\n\n"
+                                 "Verifique os logs para mais detalhes.")
+            
+    def run_system_diagnostic(self):
+        """Executa diagnóstico completo do sistema"""
+        try:
+            diagnostic_info = "=== DIAGNÓSTICO DO SISTEMA ===\n\n"
+            
+            # Informações do sistema
+            import platform
+            diagnostic_info += f"Sistema Operacional: {platform.system()} {platform.release()}\n"
+            diagnostic_info += f"Arquitetura: {platform.machine()}\n"
+            diagnostic_info += f"Python: {platform.python_version()}\n\n"
+            
+            # Status de memória
+            import psutil
+            memory = psutil.virtual_memory()
+            diagnostic_info += f"Memória Total: {memory.total / (1024**3):.1f} GB\n"
+            diagnostic_info += f"Memória Disponível: {memory.available / (1024**3):.1f} GB\n"
+            diagnostic_info += f"Uso de Memória: {memory.percent}%\n\n"
+            
+            # Status de disco
+            disk = psutil.disk_usage('.')
+            diagnostic_info += f"Disco Total: {disk.total / (1024**3):.1f} GB\n"
+            diagnostic_info += f"Disco Disponível: {disk.free / (1024**3):.1f} GB\n"
+            diagnostic_info += f"Uso de Disco: {disk.percent}%\n\n"
+            
+            # Status de rede
+            try:
+                network = psutil.net_io_counters()
+                diagnostic_info += f"Bytes Enviados: {network.bytes_sent / (1024**2):.1f} MB\n"
+                diagnostic_info += f"Bytes Recebidos: {network.bytes_recv / (1024**2):.1f} MB\n"
+            except:
+                diagnostic_info += "Status de Rede: Não disponível\n"
+                
+            # Status do processamento
+            diagnostic_info += f"\nStatus do Processamento:\n"
+            diagnostic_info += f"Processando: {'Sim' if self.processing else 'Não'}\n"
+            diagnostic_info += f"Último Heartbeat: {time.time() - self.last_heartbeat:.1f}s atrás\n"
+            
+            # Mostrar diagnóstico
+            diagnostic_window = ctk.CTkToplevel(self.root)
+            diagnostic_window.title("Diagnóstico do Sistema")
+            diagnostic_window.geometry("600x500")
+            
+            text_widget = ctk.CTkTextbox(diagnostic_window)
+            text_widget.pack(fill="both", expand=True, padx=10, pady=10)
+            text_widget.insert("1.0", diagnostic_info)
+            
+        except ImportError:
+            messagebox.showwarning("Aviso", "Para diagnóstico completo, instale: pip install psutil")
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro no diagnóstico: {e}")
+            
+    def check_memory_status(self):
+        """Verifica status de memória em tempo real"""
+        try:
+            import psutil
+            memory = psutil.virtual_memory()
+            
+            status_text = f"=== STATUS DE MEMÓRIA ===\n\n"
+            status_text += f"Total: {memory.total / (1024**3):.1f} GB\n"
+            status_text += f"Disponível: {memory.available / (1024**3):.1f} GB\n"
+            status_text += f"Usado: {memory.used / (1024**3):.1f} GB\n"
+            status_text += f"Percentual: {memory.percent}%\n\n"
+            
+            # Alertas
+            if memory.percent > 90:
+                status_text += "🚨 ALERTA: Uso de memória muito alto!\n"
+            elif memory.percent > 80:
+                status_text += "⚠️ ATENÇÃO: Uso de memória alto\n"
+            else:
+                status_text += "✅ Uso de memória normal\n"
+                
+            messagebox.showinfo("Status de Memória", status_text)
+            
+        except ImportError:
+            messagebox.showwarning("Aviso", "Para verificar memória, instale: pip install psutil")
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro ao verificar memória: {e}")
             
     def show_processing_results(self, resultado):
         """Mostra resultados do processamento"""
