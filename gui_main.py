@@ -12,7 +12,6 @@ import sys
 from datetime import datetime
 import queue
 import time
-import signal
 
 # Adicionar diretórios ao path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
@@ -39,7 +38,7 @@ class PipedriveGUI:
         self.log_queue = queue.Queue()
         self.processing_thread = None
         self.last_heartbeat = time.time()
-        self.heartbeat_interval = 5.0  # 5 segundos
+        self.heartbeat_interval = 15.0  # 15 segundos
         
         # Configurar interface
         self.setup_ui()
@@ -54,7 +53,7 @@ class PipedriveGUI:
         def heartbeat_check():
             if self.processing:
                 current_time = time.time()
-                if current_time - self.last_heartbeat > 30:  # 30 segundos sem atualização
+                if current_time - self.last_heartbeat > 120:  # 2 minutos sem atualização
                     self.log_message("⚠️ ALERTA: Possível travamento detectado!")
                     self.status_label.configure(text="⚠️ Possível travamento")
                     
@@ -63,8 +62,12 @@ class PipedriveGUI:
                     current_progress = self.progress_bar.get()
                     if current_progress < 0.95:  # Não travar em 100%
                         self.progress_bar.set(current_progress + 0.01)
+            else:
+                # Se não está processando, resetar o progresso
+                if hasattr(self, 'progress_bar'):
+                    self.progress_bar.set(0)
                         
-            self.root.after(5000, heartbeat_check)  # Verificar a cada 5 segundos
+            self.root.after(15000, heartbeat_check)  # Verificar a cada 15 segundos
             
         heartbeat_check()
         
@@ -823,6 +826,8 @@ class PipedriveGUI:
         
     def stop_processing(self):
         """Para o processamento"""
+        # Atualizar heartbeat antes de parar
+        self.update_heartbeat()
         self.processing = False
         self.process_btn.configure(state="normal")
         self.stop_btn.configure(state="disabled")
@@ -886,6 +891,8 @@ class PipedriveGUI:
             self.log_message(f"Erro no processamento: {e}")
             messagebox.showerror("Erro", f"Erro no processamento: {e}")
         finally:
+            # Atualizar heartbeat uma última vez antes de parar
+            self.update_heartbeat()
             self.processing = False
             self.process_btn.configure(state="normal")
             self.stop_btn.configure(state="disabled")
@@ -896,27 +903,38 @@ class PipedriveGUI:
         
     def process_with_timeout(self, processor, file_path):
         """Processa arquivo com timeout e atualizações de progresso"""
-        import signal
+        import threading
+        import time
         
-        def timeout_handler(signum, frame):
-            raise TimeoutError("Processamento excedeu o tempo limite")
+        # Variável para controlar timeout
+        timeout_occurred = False
+        
+        def timeout_handler():
+            nonlocal timeout_occurred
+            timeout_occurred = True
             
-        # Configurar timeout de 10 minutos
-        signal.signal(signal.SIGALRM, timeout_handler)
-        signal.alarm(600)  # 10 minutos
+        # Configurar timeout de 10 minutos usando threading.Timer (compatível com Windows)
+        timer = threading.Timer(600, timeout_handler)  # 10 minutos
         
         try:
+            timer.start()
+            
             # Processar em chunks para evitar travamentos
             resultado = processor.process_inadimplentes_from_txt(file_path)
-            signal.alarm(0)  # Cancelar alarme
+            
+            # Verificar se timeout ocorreu
+            if timeout_occurred:
+                raise TimeoutError("Processamento excedeu o tempo limite")
+                
             return resultado
             
         except TimeoutError:
-            signal.alarm(0)
             raise Exception("Processamento travou por timeout (10 minutos)")
         except Exception as e:
-            signal.alarm(0)
             raise e
+        finally:
+            # Sempre cancelar o timer
+            timer.cancel()
             
     def emergency_stop(self):
         """Para o processamento de emergência"""
@@ -928,16 +946,20 @@ class PipedriveGUI:
             self.log_message("🚨 PARADA DE EMERGÊNCIA ATIVADA!")
             self.status_label.configure(text="🚨 PARADA DE EMERGÊNCIA")
             
+            # Atualizar heartbeat antes de parar
+            self.update_heartbeat()
             # Forçar parada
             self.processing = False
             
             # Tentar interromper thread
             if self.processing_thread and self.processing_thread.is_alive():
-                # No Windows, não podemos usar signal, então vamos tentar outras abordagens
+                # No Windows, vamos usar uma abordagem mais segura
                 try:
-                    import _thread
-                    _thread.interrupt_main()
-                except:
+                    # Marcar thread para parar
+                    self.processing = False
+                    # Aguardar um pouco para a thread terminar naturalmente
+                    self.processing_thread.join(timeout=2.0)
+                except Exception:
                     pass
                     
             # Resetar interface
