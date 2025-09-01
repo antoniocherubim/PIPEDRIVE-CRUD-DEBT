@@ -16,7 +16,7 @@ requests>=2.31.0
 urllib3>=2.0.0
 
 # Para operações de banco de dados
-sqlite3  # Incluído no Python padrão
+# sqlite3 é incluído no Python padrão - não precisa instalar
 
 # Para processamento de dados
 pandas>=2.0.0

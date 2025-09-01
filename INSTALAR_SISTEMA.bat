@@ -98,11 +98,25 @@ echo ✅ Arquivos temporários removidos
 echo.
 echo 📦 Instalando dependências...
 python -m pip install --upgrade pip >nul 2>&1
+echo Instalando dependências do requirements.txt...
 python -m pip install -r requirements.txt
 if errorlevel 1 (
     echo ❌ Erro na instalação das dependências
+    echo.
+    echo 💡 Possíveis soluções:
+    echo - Verifique sua conexão com a internet
+    echo - Tente executar: python -m pip install --upgrade pip
+    echo - Algumas dependências podem precisar de Visual C++ Build Tools
+    echo.
+    echo 🔧 Tentando instalação individual das dependências principais...
+    python -m pip install customtkinter
+    python -m pip install requests
+    python -m pip install pandas
+    python -m pip install openpyxl
+    echo.
+    echo ⚠️ Instalação parcial concluída. Algumas funcionalidades podem não funcionar.
+    echo.
     pause
-    exit /b 1
 )
 echo ✅ Dependências instaladas
 
