@@ -501,17 +501,77 @@ class OptimizedBusinessRulesProcessor:
         return result
     
     def _handle_existing_person_optimized(self, pessoa_existente: Dict, inadimplente: Dict) -> Dict:
-        """Trata pessoa existente com otimizações"""
-        # Implementação simplificada - usar lógica existente
-        # TODO: Implementar lógica otimizada baseada no business_rules.py original
-        return {
-            'negocios_atualizados': [pessoa_existente['id']],
+        """
+        Trata pessoa existente com otimizações
+        Inclui regra para reabrir casos perdidos que constam no TXT para NOVAS COBRANÇAS
+        """
+        result = {
+            'negocios_atualizados': [],
             'pessoas_criadas': [],
             'negocios_criados': [],
             'negocios_movidos_para_sdr': [],
             'negocios_marcados_perdidos': [],
-            'negocios_mantidos_formalização': []
+            'negocios_mantidos_formalização': [],
+            'negocios_reabertos_novas_cobrancas': []
         }
+        
+        try:
+            entity_id = pessoa_existente['id']
+            cpf_cnpj = inadimplente.get('cpf_cnpj', '')
+            tipo_pessoa = inadimplente.get('tipo_pessoa', '')
+            
+            # Buscar negócios existentes da pessoa
+            negocios = self._get_deals_for_entity(entity_id, cpf_cnpj, tipo_pessoa)
+            
+            if negocios:
+                # Verificar cada negócio
+                for negocio in negocios:
+                    deal_id = negocio.get('id')
+                    titulo = negocio.get('title', '')
+                    status = negocio.get('status', '')
+                    pipeline_id = negocio.get('pipeline_id')
+                    stage_id = negocio.get('stage_id')
+                    
+                    # NOVA REGRA: Se o negócio está perdido (status = 'lost') e consta no TXT, reabrir para NOVAS COBRANÇAS
+                    if status == 'lost':
+                        logger.info(f"Reabrindo negócio perdido que consta no TXT para NOVAS COBRANÇAS: {titulo}")
+                        success = self._reopen_deal_to_novas_cobrancas_optimized(deal_id, titulo)
+                        
+                        if success:
+                            result['negocios_reabertos_novas_cobrancas'].append({
+                                'id': deal_id,
+                                'titulo': titulo,
+                                'acao': 'reaberto_para_novas_cobrancas'
+                            })
+                        else:
+                            result['negocios_atualizados'].append({
+                                'id': deal_id,
+                                'titulo': titulo,
+                                'acao': 'erro_ao_reabrir'
+                            })
+                    else:
+                        # Negócio não está perdido: apenas atualizar
+                        result['negocios_atualizados'].append({
+                            'id': deal_id,
+                            'titulo': titulo,
+                            'acao': 'atualizado_normalmente'
+                        })
+            else:
+                # Não há negócios: criar novo
+                logger.debug(f"Não há negócios existentes para pessoa {entity_id}, será criado novo negócio")
+                result['negocios_criados'].append({
+                    'entity_id': entity_id,
+                    'acao': 'novo_negocio_sera_criado'
+                })
+                
+        except Exception as e:
+            logger.error(f"Erro ao processar pessoa existente: {e}")
+            result['negocios_atualizados'].append({
+                'id': pessoa_existente.get('id', 'N/A'),
+                'acao': f'erro: {str(e)}'
+            })
+        
+        return result
     
     def _handle_new_person_optimized(self, inadimplente: Dict) -> Dict:
         """Trata nova pessoa com otimizações"""
@@ -691,11 +751,9 @@ class OptimizedBusinessRulesProcessor:
     def _apply_removal_rules_optimized(self, deal: Dict, pipeline_id: int, stage_id: int):
         """
         Aplica regras para documentos que não estão mais no TXT (versão otimizada)
-        Inclui regra de reabrir casos perdidos para "Iniciar Cobrança"
         """
         deal_id = deal['id']
         titulo = deal.get('title', '')
-        status = deal.get('status', '')
         
         try:
             if pipeline_id == active_config.PIPELINE_JUDICIAL_ID:
@@ -736,46 +794,30 @@ class OptimizedBusinessRulesProcessor:
                         'acao': 'mantido_etapa_excecao'
                     })
                 else:
-                    # NOVA REGRA: Se o negócio está perdido (status = 'lost'), reabrir para "Iniciar Cobrança"
-                    if status == 'lost':
-                        logger.info(f"Reabrindo negócio perdido para Iniciar Cobrança: {titulo}")
-                        self._reopen_deal_to_iniciar_cobranca_optimized(deal_id, titulo, pipeline_id)
-                    else:
-                        # Negócio não está perdido: marcar como perdido normalmente
-                        self._mark_deal_as_lost_optimized(deal_id, titulo, "Não consta mais no TXT do banco")
-            else:
-                # Outros pipelines: verificar se está perdido para reabrir
-                if status == 'lost':
-                    logger.info(f"Reabrindo negócio perdido para Iniciar Cobrança (outro pipeline): {titulo}")
-                    self._reopen_deal_to_iniciar_cobranca_optimized(deal_id, titulo, active_config.PIPELINE_BASE_NOVA_SDR_ID)
-                else:
-                    # Marcar como perdido
+                    # Marcar como perdido (casos que não constam no TXT)
                     self._mark_deal_as_lost_optimized(deal_id, titulo, "Não consta mais no TXT do banco")
+            else:
+                # Outros pipelines: marcar como perdido
+                self._mark_deal_as_lost_optimized(deal_id, titulo, "Não consta mais no TXT do banco")
                 
         except Exception as e:
             error_msg = f"Erro ao aplicar regras de remoção para {titulo}: {e}"
             logger.error(error_msg)
             self.processing_stats['erros'].append(error_msg)
     
-    def _reopen_deal_to_iniciar_cobranca_optimized(self, deal_id: int, titulo: str, target_pipeline_id: int):
+    def _reopen_deal_to_novas_cobrancas_optimized(self, deal_id: int, titulo: str) -> bool:
         """
-        Reabre negócio perdido para a etapa "Iniciar Cobrança" (versão otimizada)
+        Reabre negócio perdido para a etapa "NOVAS COBRANÇAS" (Pipeline 14, Etapa 110)
+        Retorna True se bem-sucedido, False caso contrário
         """
-        logger.info(f"Reabrindo negócio perdido para Iniciar Cobrança: {titulo}")
+        logger.info(f"Reabrindo negócio perdido para NOVAS COBRANÇAS: {titulo}")
         
         try:
-            # Determinar etapa de destino baseada no pipeline
-            if target_pipeline_id == active_config.PIPELINE_BASE_NOVA_SDR_ID:
-                target_stage_id = active_config.STAGE_INICIAR_COBRANCA_ID
-                pipeline_name = "BASE NOVA - SDR"
-            elif target_pipeline_id == active_config.PIPELINE_BASE_NOVA_NEGOCIAÇÃO_ID:
-                target_stage_id = active_config.STAGE_INICIAR_COBRANCA_ID
-                pipeline_name = "BASE NOVA - NEGOCIAÇÃO"
-            else:
-                # Para outros pipelines, usar BASE NOVA - SDR
-                target_pipeline_id = active_config.PIPELINE_BASE_NOVA_SDR_ID
-                target_stage_id = active_config.STAGE_INICIAR_COBRANCA_ID
-                pipeline_name = "BASE NOVA - SDR"
+            # Pipeline e etapa específicos: BASE NOVA - SDR (ID 14) e NOVAS COBRANÇAS (ID 110)
+            target_pipeline_id = active_config.PIPELINE_BASE_NOVA_SDR_ID  # ID 14
+            target_stage_id = active_config.STAGE_NOVAS_COBRANÇAS_ID      # ID 110
+            pipeline_name = "BASE NOVA - SDR"
+            etapa_name = "NOVAS COBRANÇAS"
             
             def reopen_deal():
                 # Atualizar negócio: status = 'open', pipeline e stage
@@ -789,24 +831,28 @@ class OptimizedBusinessRulesProcessor:
             success = self.retry_system.execute_with_retry(reopen_deal)
             
             if success:
-                self.processing_stats.setdefault('negocios_reabertos_cobranca', []).append({
+                # Registrar na estatística global
+                self.processing_stats.setdefault('negocios_reabertos_novas_cobrancas', []).append({
                     'id': deal_id,
                     'titulo': titulo,
                     'pipeline_origem': 'perdido',
                     'pipeline_destino': pipeline_name,
-                    'etapa_destino': 'Iniciar Cobrança',
-                    'acao': 'reaberto_para_iniciar_cobranca'
+                    'etapa_destino': etapa_name,
+                    'acao': 'reaberto_para_novas_cobrancas'
                 })
-                logger.info(f"Negócio reaberto para Iniciar Cobrança com sucesso: {titulo}")
+                logger.info(f"Negócio reaberto para NOVAS COBRANÇAS com sucesso: {titulo}")
+                return True
             else:
-                error_msg = f"Falha ao reabrir negócio {titulo} para Iniciar Cobrança"
+                error_msg = f"Falha ao reabrir negócio {titulo} para NOVAS COBRANÇAS"
                 logger.error(error_msg)
                 self.processing_stats['erros'].append(error_msg)
+                return False
                 
         except Exception as e:
-            error_msg = f"Erro ao reabrir negócio {titulo} para Iniciar Cobrança: {e}"
+            error_msg = f"Erro ao reabrir negócio {titulo} para NOVAS COBRANÇAS: {e}"
             logger.error(error_msg)
             self.processing_stats['erros'].append(error_msg)
+            return False
     
     def _mark_deal_as_lost_optimized(self, deal_id: int, titulo: str, reason: str):
         """
@@ -884,7 +930,7 @@ class OptimizedBusinessRulesProcessor:
         logger.info(f"Negócios atualizados: {len(self.processing_stats['negocios_atualizados'])}")
         logger.info(f"Negócios movidos para SDR: {len(self.processing_stats['negocios_movidos_para_sdr'])}")
         logger.info(f"Negócios marcados perdidos: {len(self.processing_stats['negocios_marcados_perdidos'])}")
-        logger.info(f"Negócios reabertos para Iniciar Cobrança: {len(self.processing_stats.get('negocios_reabertos_cobranca', []))}")
+        logger.info(f"Negócios reabertos para NOVAS COBRANÇAS: {len(self.processing_stats.get('negocios_reabertos_novas_cobrancas', []))}")
         logger.info(f"Negócios mantidos em formalização: {len(self.processing_stats['negocios_mantidos_formalização'])}")
         logger.info(f"Negócios judiciais preservados: {len(self.processing_stats.get('negocios_judiciais_preservados', []))}")
         logger.info(f"Erros: {len(self.processing_stats['erros'])}")
