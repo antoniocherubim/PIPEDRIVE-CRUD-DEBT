@@ -847,9 +847,11 @@ class BusinessRulesProcessor:
     def _apply_removal_rules(self, deal: Dict, pipeline_id: int, stage_id: int):
         """
         Aplica regras para documentos que não estão mais no TXT
+        Inclui regra de reabrir casos perdidos para "Iniciar Cobrança"
         """
         deal_id = deal['id']
         titulo = deal.get('title', '')
+        status = deal.get('status', '')
         
         if pipeline_id == active_config.PIPELINE_JUDICIAL_ID:
             # Pipeline JUDICIAL: não mexer, preservar
@@ -888,9 +890,19 @@ class BusinessRulesProcessor:
                     'acao': 'mantido_etapa_excecao'
                 })
             else:
-                # Marcar como perdido
-                self._mark_deal_as_lost(deal_id, titulo, "Não consta mais no TXT do banco")
+                # NOVA REGRA: Se o negócio está perdido (status = 'lost'), reabrir para "Iniciar Cobrança"
+                if status == 'lost':
+                    logger.info(f"Reabrindo negócio perdido para Iniciar Cobrança: {titulo}")
+                    self._reopen_deal_to_iniciar_cobranca(deal_id, titulo, pipeline_id)
+                else:
+                    # Negócio não está perdido: marcar como perdido normalmente
+                    self._mark_deal_as_lost(deal_id, titulo, "Não consta mais no TXT do banco")
         else:
+            # Outros pipelines: verificar se está perdido para reabrir
+            if status == 'lost':
+                logger.info(f"Reabrindo negócio perdido para Iniciar Cobrança (outro pipeline): {titulo}")
+                self._reopen_deal_to_iniciar_cobranca(deal_id, titulo, active_config.PIPELINE_BASE_NOVA_SDR_ID)
+            else:
                 # Marcar como perdido
                 self._mark_deal_as_lost(deal_id, titulo, "Não consta mais no TXT do banco")
     
@@ -937,6 +949,55 @@ class BusinessRulesProcessor:
             return documento
         return ''
     
+    def _reopen_deal_to_iniciar_cobranca(self, deal_id: int, titulo: str, target_pipeline_id: int):
+        """
+        Reabre negócio perdido para a etapa "Iniciar Cobrança"
+        """
+        logger.info(f"Reabrindo negócio perdido para Iniciar Cobrança: {titulo}")
+        
+        try:
+            # Determinar etapa de destino baseada no pipeline
+            if target_pipeline_id == active_config.PIPELINE_BASE_NOVA_SDR_ID:
+                target_stage_id = active_config.STAGE_INICIAR_COBRANCA_ID
+                pipeline_name = "BASE NOVA - SDR"
+            elif target_pipeline_id == active_config.PIPELINE_BASE_NOVA_NEGOCIAÇÃO_ID:
+                target_stage_id = active_config.STAGE_INICIAR_COBRANCA_ID
+                pipeline_name = "BASE NOVA - NEGOCIAÇÃO"
+            else:
+                # Para outros pipelines, usar BASE NOVA - SDR
+                target_pipeline_id = active_config.PIPELINE_BASE_NOVA_SDR_ID
+                target_stage_id = active_config.STAGE_INICIAR_COBRANCA_ID
+                pipeline_name = "BASE NOVA - SDR"
+            
+            # Atualizar negócio: status = 'open', pipeline e stage
+            update_data = {
+                'status': 'open',
+                'pipeline_id': target_pipeline_id,
+                'stage_id': target_stage_id
+            }
+            
+            success = self.pipedrive.update_deal(deal_id, update_data)
+            
+            if success:
+                self.processing_stats.setdefault('negocios_reabertos_cobranca', []).append({
+                    'id': deal_id,
+                    'titulo': titulo,
+                    'pipeline_origem': 'perdido',
+                    'pipeline_destino': pipeline_name,
+                    'etapa_destino': 'Iniciar Cobrança',
+                    'acao': 'reaberto_para_iniciar_cobranca'
+                })
+                logger.info(f"Negócio reaberto para Iniciar Cobrança com sucesso: {titulo}")
+            else:
+                error_msg = f"Falha ao reabrir negócio {titulo} para Iniciar Cobrança"
+                logger.error(error_msg)
+                self.processing_stats['erros'].append(error_msg)
+                
+        except Exception as e:
+            error_msg = f"Erro ao reabrir negócio {titulo} para Iniciar Cobrança: {e}"
+            logger.error(error_msg)
+            self.processing_stats['erros'].append(error_msg)
+    
     def _mark_deal_as_lost(self, deal_id: int, titulo: str, reason: str):
         """
         Marca negócio como perdido
@@ -964,6 +1025,7 @@ class BusinessRulesProcessor:
         logger.info(f"Negócios atualizados: {len(self.processing_stats['negocios_atualizados'])}")
         logger.info(f"Negócios movidos para SDR: {len(self.processing_stats['negocios_movidos_para_sdr'])}")
         logger.info(f"Negócios marcados perdidos: {len(self.processing_stats['negocios_marcados_perdidos'])}")
+        logger.info(f"Negócios reabertos para Iniciar Cobrança: {len(self.processing_stats.get('negocios_reabertos_cobranca', []))}")
         logger.info(f"Negócios mantidos em formalização: {len(self.processing_stats['negocios_mantidos_formalização'])}")
         logger.info(f"Negócios judiciais preservados: {len(self.processing_stats.get('negocios_judiciais_preservados', []))}")
         logger.info(f"Erros: {len(self.processing_stats['erros'])}")

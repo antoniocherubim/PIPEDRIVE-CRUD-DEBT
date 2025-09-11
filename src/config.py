@@ -59,6 +59,10 @@ class Config:
     # Etapa principal para novos negócios
     STAGE_NOVAS_COBRANÇAS_ID = 110  # ID da etapa "NOVOS CONTRATOS" no funil BASE NOVA - SDR
     
+    # Etapas "Iniciar Cobrança" - para reabrir casos perdidos
+    STAGE_INICIAR_COBRANCA_ID = 115  # ID da etapa "Iniciar Cobrança" (principal)
+    STAGE_INICIAR_COBRANCA_ALT_ID = 208  # ID alternativo da etapa "Iniciar Cobrança"
+    
     # Etapas de exceção (não devem ser marcadas como perdidas)
     STAGE_ENVIAR_MINUTA_BOLETO_ID = 124  # ID da etapa "-> Enviar Boleto" no funil Formalização/Pagamento
     STAGE_AGUARDANDO_PAGAMENTO_ID = 173  # ID da etapa "Agdo Pagamento" no funil Negociação

@@ -19,6 +19,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'utils'))
 
 # Imports do sistema
 from src.business_rules import BusinessRulesProcessor
+from src.optimized_business_rules import OptimizedBusinessRulesProcessor
+from src.excel_export import PipedriveExcelExporter
 from src.config import active_config
 
 # Configurar tema do CustomTkinter
@@ -38,7 +40,17 @@ class PipedriveGUI:
         self.log_queue = queue.Queue()
         self.processing_thread = None
         self.last_heartbeat = time.time()
-        self.heartbeat_interval = 15.0  # 15 segundos
+        self.heartbeat_interval = 30.0  # 30 segundos (otimizado)
+        
+        # Variáveis de progresso otimizado
+        self.total_items = 0
+        self.processed_items = 0
+        self.last_progress_update = time.time()
+        
+        # Processador otimizado
+        self.optimized_processor = None
+        self.excel_exporter = PipedriveExcelExporter()
+        self.background_processor = None
         
         # Configurar interface
         self.setup_ui()
@@ -49,25 +61,38 @@ class PipedriveGUI:
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         
     def setup_heartbeat(self):
-        """Configura sistema de heartbeat para detectar travamentos"""
+        """Configura sistema de heartbeat otimizado para detectar travamentos"""
         def heartbeat_check():
             if self.processing:
                 current_time = time.time()
-                if current_time - self.last_heartbeat > 120:  # 2 minutos sem atualização
-                    self.log_message("⚠️ ALERTA: Possível travamento detectado!")
+                
+                # Verificar se realmente travou (5 minutos sem progresso real)
+                if current_time - self.last_progress_update > 300:  # 5 minutos
+                    self.log_message("⚠️ ALERTA: Processamento pode ter travado!")
                     self.status_label.configure(text="⚠️ Possível travamento")
-                    
-                # Atualizar progresso
-                if hasattr(self, 'progress_bar'):
-                    current_progress = self.progress_bar.get()
-                    if current_progress < 0.95:  # Não travar em 100%
-                        self.progress_bar.set(current_progress + 0.01)
+                else:
+                    # Atualizar progresso baseado em itens processados
+                    if self.total_items > 0:
+                        progress = min(self.processed_items / self.total_items, 0.95)
+                        if hasattr(self, 'progress_bar'):
+                            self.progress_bar.set(progress)
+                        
+                        # Atualizar status com informações reais
+                        percentage = (self.processed_items / self.total_items) * 100
+                        self.status_label.configure(
+                            text=f"Processando: {self.processed_items}/{self.total_items} "
+                                 f"({percentage:.1f}%)"
+                        )
+                        
+                        # Log de progresso a cada 10%
+                        if self.processed_items % max(1, self.total_items // 10) == 0:
+                            self.log_message(f"Progresso: {self.processed_items}/{self.total_items} ({percentage:.1f}%)")
             else:
                 # Se não está processando, resetar o progresso
                 if hasattr(self, 'progress_bar'):
                     self.progress_bar.set(0)
                         
-            self.root.after(15000, heartbeat_check)  # Verificar a cada 15 segundos
+            self.root.after(30000, heartbeat_check)  # Verificar a cada 30 segundos (otimizado)
             
         heartbeat_check()
         
@@ -222,6 +247,39 @@ class PipedriveGUI:
         )
         self.process_btn.pack(side="left", padx=(10, 10), pady=10)
         
+        # Botão de processamento otimizado
+        self.process_optimized_btn = ctk.CTkButton(
+            buttons_frame,
+            text="🚀 Processar Otimizado",
+            command=self.start_processing_optimized,
+            fg_color="#FF6B35",
+            hover_color="#E55A2B",
+            height=40
+        )
+        self.process_optimized_btn.pack(side="left", padx=(0, 10), pady=10)
+        
+        # Botão de exportação Excel
+        self.export_excel_btn = ctk.CTkButton(
+            buttons_frame,
+            text="📊 Exportar Excel",
+            command=self.export_to_excel,
+            fg_color="#4ECDC4",
+            hover_color="#45B7B8",
+            height=40
+        )
+        self.export_excel_btn.pack(side="left", padx=(0, 10), pady=10)
+        
+        # Botão de processamento em background
+        self.background_btn = ctk.CTkButton(
+            buttons_frame,
+            text="🌙 Background",
+            command=self.start_background_processing,
+            fg_color="#8E44AD",
+            hover_color="#7D3C98",
+            height=40
+        )
+        self.background_btn.pack(side="left", padx=(0, 10), pady=10)
+        
         self.stop_btn = ctk.CTkButton(
             buttons_frame,
             text="⏹️ Parar",
@@ -357,6 +415,30 @@ class PipedriveGUI:
             command=self.show_processing_report,
             width=200,
             height=40
+        ).pack(side="left", padx=(0, 10))
+        
+        # Terceira linha - Background
+        row3 = ctk.CTkFrame(buttons_frame)
+        row3.pack(fill="x", padx=10, pady=10)
+        
+        ctk.CTkButton(
+            row3,
+            text="🌙 Status Background",
+            command=self.check_background_status,
+            width=200,
+            height=40,
+            fg_color="#8E44AD",
+            hover_color="#7D3C98"
+        ).pack(side="left", padx=(0, 10))
+        
+        ctk.CTkButton(
+            row3,
+            text="🛑 Parar Background",
+            command=self.stop_background_processing,
+            width=200,
+            height=40,
+            fg_color="#E74C3C",
+            hover_color="#C0392B"
         ).pack(side="left", padx=(0, 10))
         
     def create_logs_tab(self):
@@ -799,7 +881,7 @@ class PipedriveGUI:
             self.log_message(f"Planilha selecionada para processamento: {file}")
         
     def start_processing(self):
-        """Inicia o processamento"""
+        """Inicia o processamento tradicional"""
         if not self.selected_file.get():
             messagebox.showerror("Erro", "Selecione um arquivo TXT primeiro")
             return
@@ -811,6 +893,9 @@ class PipedriveGUI:
         self.processing = True
         self.last_heartbeat = time.time()  # Reset heartbeat
         self.process_btn.configure(state="disabled")
+        self.process_optimized_btn.configure(state="disabled")
+        self.export_excel_btn.configure(state="disabled")
+        self.background_btn.configure(state="disabled")
         self.stop_btn.configure(state="normal")
         self.emergency_btn.configure(state="normal")
         self.status_label.configure(text="Processando...")
@@ -823,17 +908,100 @@ class PipedriveGUI:
         
         # Configurar timeout para o processamento
         self.root.after(300000, self.check_processing_timeout)  # 5 minutos
+    
+    def start_processing_optimized(self):
+        """Inicia o processamento otimizado"""
+        if not self.selected_file.get():
+            messagebox.showerror("Erro", "Selecione um arquivo TXT primeiro")
+            return
+            
+        if not os.path.exists(self.selected_file.get()):
+            messagebox.showerror("Erro", "Arquivo não encontrado")
+            return
+        
+        # Contar itens para progresso real
+        self.total_items = self._count_items_in_file()
+        self.processed_items = 0
+        
+        if self.total_items == 0:
+            messagebox.showwarning("Aviso", "Nenhum item válido encontrado no arquivo")
+            return
+        
+        # Configurar interface
+        self.processing = True
+        self.last_heartbeat = time.time()
+        self.last_progress_update = time.time()
+        self.process_btn.configure(state="disabled")
+        self.process_optimized_btn.configure(state="disabled")
+        self.export_excel_btn.configure(state="disabled")
+        self.background_btn.configure(state="disabled")
+        self.stop_btn.configure(state="normal")
+        self.emergency_btn.configure(state="normal")
+        self.status_label.configure(text=f"Iniciando processamento otimizado de {self.total_items} itens...")
+        self.progress_bar.set(0)
+        
+        self.log_message(f"🚀 Iniciando processamento otimizado de {self.total_items} itens")
+        
+        # Executar em thread separada
+        self.processing_thread = threading.Thread(target=self.process_file_optimized)
+        self.processing_thread.daemon = True
+        self.processing_thread.start()
+    
+    def _count_items_in_file(self) -> int:
+        """Conta itens no arquivo para progresso real"""
+        try:
+            with open(self.selected_file.get(), 'r', encoding='latin-1') as f:
+                lines = f.readlines()
+            
+            # Contar registros tipo '01' (devedores principais)
+            count = 0
+            for line in lines:
+                if line.startswith('01'):
+                    count += 1
+            
+            return count
+        except Exception as e:
+            self.log_message(f"Erro ao contar itens: {e}")
+            return 0
+    
+    def update_progress(self, processed_count: int, total_count: int):
+        """Atualiza progresso real"""
+        self.processed_items = processed_count
+        self.total_items = total_count
+        self.last_progress_update = time.time()
+        
+        if self.total_items > 0:
+            progress = min(processed_count / self.total_items, 0.95)
+            self.progress_bar.set(progress)
+            
+            percentage = (processed_count / self.total_items) * 100
+            self.status_label.configure(
+                text=f"Processando: {processed_count}/{total_count} ({percentage:.1f}%)"
+            )
         
     def stop_processing(self):
         """Para o processamento"""
         # Atualizar heartbeat antes de parar
         self.update_heartbeat()
         self.processing = False
+        
+        # Parar processador otimizado se estiver rodando
+        if self.optimized_processor:
+            self.optimized_processor.stop_processing()
+        
+        # Resetar interface
         self.process_btn.configure(state="normal")
+        self.process_optimized_btn.configure(state="normal")
+        self.export_excel_btn.configure(state="normal")
+        self.background_btn.configure(state="normal")
         self.stop_btn.configure(state="disabled")
         self.emergency_btn.configure(state="disabled")
         self.status_label.configure(text="Processamento interrompido")
         self.progress_bar.set(0)
+        
+        # Resetar contadores
+        self.total_items = 0
+        self.processed_items = 0
         
         # Aguardar thread terminar se estiver rodando
         if self.processing_thread and self.processing_thread.is_alive():
@@ -858,9 +1026,9 @@ class PipedriveGUI:
                     self.stop_processing()
         
     def process_file(self):
-        """Processa o arquivo em thread separada"""
+        """Processa o arquivo em thread separada (método tradicional)"""
         try:
-            self.log_message("Iniciando processamento...")
+            self.log_message("Iniciando processamento tradicional...")
             self.update_heartbeat()
             
             # Configurar processador
@@ -895,7 +1063,67 @@ class PipedriveGUI:
             self.update_heartbeat()
             self.processing = False
             self.process_btn.configure(state="normal")
+            self.process_optimized_btn.configure(state="normal")
+            self.export_excel_btn.configure(state="normal")
             self.stop_btn.configure(state="disabled")
+    
+    def process_file_optimized(self):
+        """Processa o arquivo em thread separada (método otimizado)"""
+        try:
+            self.log_message("Iniciando processamento otimizado...")
+            self.update_heartbeat()
+            
+            # Configurar processador otimizado
+            db_name = self.db_name_entry.get() if self.db_name_entry.get() else None
+            self.optimized_processor = OptimizedBusinessRulesProcessor(
+                db_name=db_name,
+                max_concurrent_requests=2,  # Reduzido para 2 para evitar rate limits
+                batch_size=25  # Reduzido para 25 para ser mais conservador
+            )
+            
+            # Definir callback para atualizar progresso
+            self.optimized_processor.set_progress_callback(self.update_progress)
+            
+            self.log_message("Processador otimizado configurado")
+            self.update_heartbeat()
+            
+            # Processar arquivo com otimizações
+            resultado = self.optimized_processor.process_inadimplentes_optimized(self.selected_file.get())
+            
+            if not self.processing:  # Verificar se foi interrompido
+                return
+                
+            self.log_message("Processamento otimizado concluído")
+            self.update_heartbeat()
+            
+            # Mostrar resultados
+            self.show_processing_results(resultado)
+            
+            self.progress_bar.set(1.0)
+            self.status_label.configure(text="Processamento otimizado concluído")
+            
+            # Log de estatísticas
+            self.log_message(f"✅ Processamento concluído:")
+            self.log_message(f"   - Pessoas criadas: {len(resultado.get('pessoas_criadas', []))}")
+            self.log_message(f"   - Negócios criados: {len(resultado.get('negocios_criados', []))}")
+            self.log_message(f"   - Negócios atualizados: {len(resultado.get('negocios_atualizados', []))}")
+            self.log_message(f"   - Erros: {len(resultado.get('erros', []))}")
+            
+        except Exception as e:
+            self.log_message(f"Erro no processamento otimizado: {e}")
+            messagebox.showerror("Erro", f"Erro no processamento otimizado: {e}")
+        finally:
+            # Atualizar heartbeat uma última vez antes de parar
+            self.update_heartbeat()
+            self.processing = False
+            self.process_btn.configure(state="normal")
+            self.process_optimized_btn.configure(state="normal")
+            self.export_excel_btn.configure(state="normal")
+            self.stop_btn.configure(state="disabled")
+            
+            # Resetar contadores
+            self.total_items = 0
+            self.processed_items = 0
             
     def update_heartbeat(self):
         """Atualiza o timestamp do último heartbeat"""
@@ -1330,6 +1558,198 @@ class PipedriveGUI:
             messagebox.showinfo("Sucesso", "Configuração carregada com sucesso!")
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao carregar configuração: {e}")
+    
+    def export_to_excel(self):
+        """Exporta dados para planilha Excel de importação do Pipedrive"""
+        if not self.selected_file.get():
+            messagebox.showerror("Erro", "Selecione um arquivo TXT primeiro")
+            return
+            
+        if not os.path.exists(self.selected_file.get()):
+            messagebox.showerror("Erro", "Arquivo não encontrado")
+            return
+        
+        try:
+            # Perguntar tipo de exportação
+            export_type = messagebox.askyesnocancel(
+                "Tipo de Exportação",
+                "Escolha o tipo de exportação:\n\n"
+                "SIM = Dados completos (Pessoas + Negócios)\n"
+                "NÃO = Apenas template de campos personalizados\n"
+                "CANCELAR = Cancelar operação"
+            )
+            
+            if export_type is None:  # Cancelar
+                return
+            
+            if export_type:  # Exportar dados completos
+                self.log_message("📊 Iniciando exportação de dados completos...")
+                
+                # Processar arquivo TXT
+                from src.file_processor import FileProcessor
+                file_processor = FileProcessor()
+                inadimplentes_data = file_processor.process_txt_file_direct(self.selected_file.get())
+                
+                if not inadimplentes_data:
+                    messagebox.showerror("Erro", "Nenhum dado válido encontrado no arquivo")
+                    return
+                
+                # Gerar nome do arquivo
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"pipedrive_import_{timestamp}.xlsx"
+                
+                # Exportar para Excel
+                filepath = self.excel_exporter.export_inadimplentes_to_excel(inadimplentes_data, filename)
+                
+                # Obter resumo
+                summary = self.excel_exporter.get_export_summary(filepath)
+                
+                # Mostrar resultado
+                messagebox.showinfo(
+                    "Exportação Concluída",
+                    f"✅ Arquivo Excel gerado com sucesso!\n\n"
+                    f"📁 Arquivo: {summary['arquivo']}\n"
+                    f"📊 Registros: {summary['total_registros']}\n"
+                    f"📏 Tamanho: {summary['tamanho_mb']} MB\n"
+                    f"📅 Criado em: {summary['data_criacao']}\n\n"
+                    f"📍 Local: {filepath}"
+                )
+                
+                self.log_message(f"✅ Exportação concluída: {summary['total_registros']} registros")
+                
+            else:  # Exportar apenas template
+                self.log_message("📋 Gerando template de campos personalizados...")
+                
+                filepath = self.excel_exporter.export_custom_fields_template()
+                
+                messagebox.showinfo(
+                    "Template Gerado",
+                    f"✅ Template de campos personalizados gerado!\n\n"
+                    f"📁 Arquivo: {os.path.basename(filepath)}\n"
+                    f"📍 Local: {filepath}\n\n"
+                    f"Este template contém a estrutura dos campos personalizados\n"
+                    f"do Pipedrive para referência na importação."
+                )
+                
+                self.log_message(f"✅ Template gerado: {filepath}")
+                
+        except Exception as e:
+            error_msg = f"Erro na exportação: {e}"
+            self.log_message(f"❌ {error_msg}")
+            messagebox.showerror("Erro", error_msg)
+    
+    def start_background_processing(self):
+        """Inicia processamento em background"""
+        if not self.selected_file.get():
+            messagebox.showerror("Erro", "Selecione um arquivo TXT primeiro")
+            return
+            
+        if not os.path.exists(self.selected_file.get()):
+            messagebox.showerror("Erro", "Arquivo não encontrado")
+            return
+        
+        # Perguntar confirmação
+        confirm = messagebox.askyesno(
+            "Processamento em Background",
+            "O processamento em background permite que você feche a GUI e o processamento continue.\n\n"
+            "Deseja iniciar o processamento em background?\n\n"
+            "⚠️ ATENÇÃO: O processamento continuará mesmo se você fechar a aplicação."
+        )
+        
+        if not confirm:
+            return
+        
+        try:
+            self.log_message("🌙 Iniciando processamento em background...")
+            
+            # Configurar processador em background
+            from src.background_processor import BackgroundProcessor
+            self.background_processor = BackgroundProcessor()
+            
+            # Executar em thread separada
+            self.processing_thread = threading.Thread(
+                target=self._run_background_processing,
+                daemon=False  # Não daemon para continuar após fechar GUI
+            )
+            self.processing_thread.start()
+            
+            # Mostrar informações
+            messagebox.showinfo(
+                "Processamento em Background",
+                "✅ Processamento em background iniciado!\n\n"
+                "📋 Características:\n"
+                "• Continua mesmo se fechar a GUI\n"
+                "• Salva progresso automaticamente\n"
+                "• Pode ser interrompido via logs\n"
+                "• Recupera de interrupções\n\n"
+                "📁 Logs: logs/background/background_processing.log"
+            )
+            
+            self.log_message("✅ Processamento em background iniciado com sucesso")
+            
+        except Exception as e:
+            error_msg = f"Erro ao iniciar processamento em background: {e}"
+            self.log_message(f"❌ {error_msg}")
+            messagebox.showerror("Erro", error_msg)
+    
+    def _run_background_processing(self):
+        """Executa processamento em background"""
+        try:
+            db_name = self.db_name_entry.get() if self.db_name_entry.get() else None
+            
+            results = self.background_processor.process_file_background(
+                self.selected_file.get(),
+                db_name
+            )
+            
+            # Log de resultados
+            if 'error' in results:
+                self.log_message(f"❌ Erro no processamento em background: {results['error']}")
+            else:
+                self.log_message("✅ Processamento em background concluído com sucesso")
+                self.log_message(f"📊 Resultados:")
+                self.log_message(f"   - Pessoas criadas: {len(results.get('pessoas_criadas', []))}")
+                self.log_message(f"   - Negócios criados: {len(results.get('negocios_criados', []))}")
+                self.log_message(f"   - Negócios atualizados: {len(results.get('negocios_atualizados', []))}")
+                self.log_message(f"   - Erros: {len(results.get('erros', []))}")
+                
+        except Exception as e:
+            self.log_message(f"❌ Erro no processamento em background: {e}")
+    
+    def check_background_status(self):
+        """Verifica status do processamento em background"""
+        try:
+            if self.background_processor:
+                status = self.background_processor.get_processing_status()
+                
+                if status['status'] == 'processing':
+                    self.log_message(f"🔄 Processamento em background ativo:")
+                    self.log_message(f"   - Arquivo: {status.get('txt_path', 'N/A')}")
+                    self.log_message(f"   - Progresso: {status.get('last_processed_index', 0)} itens")
+                    self.log_message(f"   - Iniciado: {status.get('timestamp', 'N/A')}")
+                elif status['status'] == 'completed':
+                    self.log_message("✅ Processamento em background concluído")
+                elif status['status'] == 'idle':
+                    self.log_message("💤 Nenhum processamento em background ativo")
+                else:
+                    self.log_message(f"❓ Status desconhecido: {status}")
+            else:
+                self.log_message("💤 Processador em background não inicializado")
+                
+        except Exception as e:
+            self.log_message(f"❌ Erro ao verificar status: {e}")
+    
+    def stop_background_processing(self):
+        """Para processamento em background"""
+        try:
+            if self.background_processor:
+                self.background_processor.stop_background_processing()
+                self.log_message("🛑 Processamento em background interrompido")
+            else:
+                self.log_message("❌ Nenhum processamento em background ativo")
+                
+        except Exception as e:
+            self.log_message(f"❌ Erro ao parar processamento em background: {e}")
             
     def run(self):
         """Executa a GUI"""
