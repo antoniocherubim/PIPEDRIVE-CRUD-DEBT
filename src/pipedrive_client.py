@@ -5,8 +5,8 @@ Suporta APIs v1 e v2 com sistema híbrido
 import requests
 import logging
 from typing import Dict, List, Optional, Any
-from config import active_config
-from custom_fields_config import CustomFieldsConfig
+from .config import active_config
+from .custom_fields_config import CustomFieldsConfig
 
 logger = logging.getLogger(__name__)
 
@@ -196,12 +196,14 @@ class PipedriveClient:
         cursor = None
         
         while True:
-            params['limit'] = 500  # Limite máximo do Pipedrive
+            # Criar uma cópia dos parâmetros para não modificar o original
+            request_params = params.copy()
+            request_params['limit'] = 500  # Limite máximo do Pipedrive
             
             if cursor:
-                params['cursor'] = cursor
+                request_params['cursor'] = cursor
             
-            result = self._make_request('GET', endpoint, params=params)
+            result = self._make_request('GET', endpoint, params=request_params)
             
             if not result.get('success', False):
                 logger.error(f"Erro na paginação v2: {result.get('error', 'Erro desconhecido')}")
@@ -212,15 +214,19 @@ class PipedriveClient:
                 break
             
             all_data.extend(data)
+            logger.debug(f"Página v2: {len(data)} itens (Total: {len(all_data)})")
             
-            # Verificar se há mais páginas na v2
+            # Verificar se há mais páginas usando next_cursor diretamente
             additional_data = result.get('additional_data', {})
-            pagination = additional_data.get('pagination', {})
+            next_cursor = additional_data.get('next_cursor')
             
-            cursor = pagination.get('next_cursor')
-            if not cursor:
+            if not next_cursor:
+                logger.debug("Não há mais páginas na v2")
                 break
+            
+            cursor = next_cursor
         
+        logger.info(f"Paginação v2 concluída: {len(all_data)} itens total")
         return all_data
     
     def _get_api_version_for_endpoint(self, endpoint: str) -> str:

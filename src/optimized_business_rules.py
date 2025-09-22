@@ -189,7 +189,7 @@ class OptimizedBusinessRulesProcessor:
     def __init__(self, pipedrive_client: PipedriveClient = None, 
                  file_processor: FileProcessor = None,
                  db_name: str = None,
-                 max_concurrent_requests: int = 5,
+                 max_concurrent_requests: int = 8,  # Aumentado de 5 para 8
                  batch_size: int = 50):
         
         self.pipedrive = pipedrive_client or PipedriveClient()
@@ -200,7 +200,7 @@ class OptimizedBusinessRulesProcessor:
         self.batch_size = batch_size
         
         # Componentes de otimização
-        self.rate_limiter = RateLimiter(requests_per_minute=100)
+        self.rate_limiter = RateLimiter(requests_per_minute=120)  # Aumentado de 100 para 120
         self.monitor = ProcessingMonitor()
         self.retry_system = RetrySystem(max_retries=3)
         
