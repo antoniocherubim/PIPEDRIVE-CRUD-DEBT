@@ -5,8 +5,8 @@ Suporta APIs v1 e v2 com sistema híbrido
 import requests
 import logging
 from typing import Dict, List, Optional, Any
-from .config import active_config
-from .custom_fields_config import CustomFieldsConfig
+from config import active_config
+from custom_fields_config import CustomFieldsConfig
 
 logger = logging.getLogger(__name__)
 

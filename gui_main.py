@@ -18,10 +18,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'utils'))
 
 # Imports do sistema
-from src.business_rules import BusinessRulesProcessor
-from src.optimized_business_rules import OptimizedBusinessRulesProcessor
-from src.excel_export import PipedriveExcelExporter
-from src.config import active_config
+from business_rules import BusinessRulesProcessor
+from optimized_business_rules import OptimizedBusinessRulesProcessor
+from excel_export import PipedriveExcelExporter
+from config import active_config
 
 # Configurar tema do CustomTkinter
 ctk.set_appearance_mode("dark")  # Modes: "System" (standard), "Dark", "Light"
@@ -269,27 +269,27 @@ class PipedriveGUI:
         )
         self.export_excel_btn.pack(side="left", padx=(0, 10), pady=10)
         
-         # Botão de processamento em background
-         self.background_btn = ctk.CTkButton(
-             buttons_frame,
-             text="🌙 Background",
-             command=self.start_background_processing,
-             fg_color="#8E44AD",
-             hover_color="#7D3C98",
-             height=40
-         )
-         self.background_btn.pack(side="left", padx=(0, 10), pady=10)
-         
-         # Botão de configuração de performance
-         self.performance_btn = ctk.CTkButton(
-             buttons_frame,
-             text="⚡ Performance",
-             command=self.show_performance_config,
-             fg_color="#F39C12",
-             hover_color="#E67E22",
-             height=40
-         )
-         self.performance_btn.pack(side="left", padx=(0, 10), pady=10)
+        # Botão de processamento em background
+        self.background_btn = ctk.CTkButton(
+            buttons_frame,
+            text="🌙 Background",
+            command=self.start_background_processing,
+            fg_color="#8E44AD",
+            hover_color="#7D3C98",
+            height=40
+        )
+        self.background_btn.pack(side="left", padx=(0, 10), pady=10)
+        
+        # Botão de configuração de performance
+        self.performance_btn = ctk.CTkButton(
+            buttons_frame,
+            text="⚡ Performance",
+            command=self.show_performance_config,
+            fg_color="#F39C12",
+            hover_color="#E67E22",
+            height=40
+        )
+        self.performance_btn.pack(side="left", padx=(0, 10), pady=10)
         
         self.stop_btn = ctk.CTkButton(
             buttons_frame,
@@ -1084,30 +1084,30 @@ class PipedriveGUI:
             self.log_message("Iniciando processamento otimizado...")
             self.update_heartbeat()
             
-             # Configurar processador otimizado com threads dinâmicas
-             db_name = self.db_name_entry.get() if self.db_name_entry.get() else None
-             
-             # Calcular número de threads baseado no total de itens
-             if self.total_items <= 50:
-                 max_threads = 4
-                 batch_size = 20
-             elif self.total_items <= 200:
-                 max_threads = 6
-                 batch_size = 30
-             elif self.total_items <= 500:
-                 max_threads = 8
-                 batch_size = 40
-             else:
-                 max_threads = 10  # Máximo de 10 threads para arquivos grandes
-                 batch_size = 50
-             
-             self.optimized_processor = OptimizedBusinessRulesProcessor(
-                 db_name=db_name,
-                 max_concurrent_requests=max_threads,
-                 batch_size=batch_size
-             )
-             
-             self.log_message(f"Configuração otimizada: {max_threads} threads, lotes de {batch_size}")
+            # Configurar processador otimizado com threads dinâmicas
+            db_name = self.db_name_entry.get() if self.db_name_entry.get() else None
+            
+            # Calcular número de threads baseado no total de itens
+            if self.total_items <= 50:
+                max_threads = 4
+                batch_size = 20
+            elif self.total_items <= 200:
+                max_threads = 6
+                batch_size = 30
+            elif self.total_items <= 500:
+                max_threads = 8
+                batch_size = 40
+            else:
+                max_threads = 10  # Máximo de 10 threads para arquivos grandes
+                batch_size = 50
+            
+            self.optimized_processor = OptimizedBusinessRulesProcessor(
+                db_name=db_name,
+                max_concurrent_requests=max_threads,
+                batch_size=batch_size
+            )
+            
+            self.log_message(f"Configuração otimizada: {max_threads} threads, lotes de {batch_size}")
             
             # Definir callback para atualizar progresso
             self.optimized_processor.set_progress_callback(self.update_progress)
@@ -1614,7 +1614,7 @@ class PipedriveGUI:
                 self.log_message("📊 Iniciando exportação de dados completos...")
                 
                 # Processar arquivo TXT
-                from src.file_processor import FileProcessor
+                from file_processor import FileProcessor
                 file_processor = FileProcessor()
                 inadimplentes_data = file_processor.process_txt_file_direct(self.selected_file.get())
                 
@@ -1691,7 +1691,7 @@ class PipedriveGUI:
             self.log_message("🌙 Iniciando processamento em background...")
             
             # Configurar processador em background
-            from src.background_processor import BackgroundProcessor
+            from background_processor import BackgroundProcessor
             self.background_processor = BackgroundProcessor()
             
             # Executar em thread separada
@@ -1776,230 +1776,230 @@ class PipedriveGUI:
             else:
                 self.log_message("❌ Nenhum processamento em background ativo")
                 
-         except Exception as e:
-             self.log_message(f"❌ Erro ao parar processamento em background: {e}")
+        except Exception as e:
+            self.log_message(f"❌ Erro ao parar processamento em background: {e}")
              
-     def show_performance_config(self):
-         """Mostra configuração de performance e estatísticas"""
-         try:
-             # Criar janela de configuração de performance
-             perf_window = ctk.CTkToplevel(self.root)
-             perf_window.title("⚡ Configuração de Performance")
-             perf_window.geometry("700x600")
-             
-             # Título
-             title_label = ctk.CTkLabel(
-                 perf_window,
-                 text="⚡ Configuração de Performance",
-                 font=ctk.CTkFont(size=20, weight="bold")
-             )
-             title_label.pack(pady=(20, 10))
-             
-             # Frame principal
-             main_frame = ctk.CTkFrame(perf_window)
-             main_frame.pack(fill="both", expand=True, padx=20, pady=(0, 20))
-             
-             # Configurações atuais
-             config_frame = ctk.CTkFrame(main_frame)
-             config_frame.pack(fill="x", padx=10, pady=10)
-             
-             ctk.CTkLabel(config_frame, text="📊 Configurações Atuais:", font=ctk.CTkFont(size=16, weight="bold")).pack(anchor="w", padx=10, pady=(10, 5))
-             
-             # Mostrar configurações baseadas no total de itens
-             if hasattr(self, 'total_items') and self.total_items > 0:
-                 if self.total_items <= 50:
-                     max_threads = 4
-                     batch_size = 20
-                 elif self.total_items <= 200:
-                     max_threads = 6
-                     batch_size = 30
-                 elif self.total_items <= 500:
-                     max_threads = 8
-                     batch_size = 40
-                 else:
-                     max_threads = 10
-                     batch_size = 50
-                     
-                 config_text = f"""
+    def show_performance_config(self):
+        """Mostra configuração de performance e estatísticas"""
+        try:
+            # Criar janela de configuração de performance
+            perf_window = ctk.CTkToplevel(self.root)
+            perf_window.title("⚡ Configuração de Performance")
+            perf_window.geometry("700x600")
+            
+            # Título
+            title_label = ctk.CTkLabel(
+                perf_window,
+                text="⚡ Configuração de Performance",
+                font=ctk.CTkFont(size=20, weight="bold")
+            )
+            title_label.pack(pady=(20, 10))
+            
+            # Frame principal
+            main_frame = ctk.CTkFrame(perf_window)
+            main_frame.pack(fill="both", expand=True, padx=20, pady=(0, 20))
+            
+            # Configurações atuais
+            config_frame = ctk.CTkFrame(main_frame)
+            config_frame.pack(fill="x", padx=10, pady=10)
+            
+            ctk.CTkLabel(config_frame, text="📊 Configurações Atuais:", font=ctk.CTkFont(size=16, weight="bold")).pack(anchor="w", padx=10, pady=(10, 5))
+            
+            # Mostrar configurações baseadas no total de itens
+            if hasattr(self, 'total_items') and self.total_items > 0:
+                if self.total_items <= 50:
+                    max_threads = 4
+                    batch_size = 20
+                elif self.total_items <= 200:
+                    max_threads = 6
+                    batch_size = 30
+                elif self.total_items <= 500:
+                    max_threads = 8
+                    batch_size = 40
+                else:
+                    max_threads = 10
+                    batch_size = 50
+                    
+                config_text = f"""
 Total de itens: {self.total_items}
 Threads configuradas: {max_threads}
 Tamanho do lote: {batch_size}
 Rate limit: 120 req/min
 Timeout: 10 minutos
-                 """
-             else:
-                 config_text = """
+                """
+            else:
+                config_text = """
 Nenhum arquivo selecionado ainda.
 As configurações serão definidas automaticamente
 baseadas no tamanho do arquivo.
-                 """
-             
-             config_display = ctk.CTkTextbox(config_frame, height=120)
-             config_display.pack(fill="x", padx=10, pady=(0, 10))
-             config_display.insert("1.0", config_text)
-             config_display.configure(state="disabled")
-             
-             # Estatísticas de performance
-             stats_frame = ctk.CTkFrame(main_frame)
-             stats_frame.pack(fill="both", expand=True, padx=10, pady=10)
-             
-             ctk.CTkLabel(stats_frame, text="📈 Estatísticas de Performance:", font=ctk.CTkFont(size=16, weight="bold")).pack(anchor="w", padx=10, pady=(10, 5))
-             
-             # Calcular estatísticas
-             stats_text = self._calculate_performance_stats()
-             
-             stats_display = ctk.CTkTextbox(stats_frame, height=200)
-             stats_display.pack(fill="both", expand=True, padx=10, pady=(0, 10))
-             stats_display.insert("1.0", stats_text)
-             stats_display.configure(state="disabled")
-             
-             # Botões de ação
-             buttons_frame = ctk.CTkFrame(main_frame)
-             buttons_frame.pack(fill="x", padx=10, pady=10)
-             
-             ctk.CTkButton(
-                 buttons_frame,
-                 text="🔄 Atualizar Estatísticas",
-                 command=lambda: self._update_performance_display(stats_display),
-                 width=150
-             ).pack(side="left", padx=(0, 10), pady=10)
-             
-             ctk.CTkButton(
-                 buttons_frame,
-                 text="📊 Teste de Performance",
-                 command=self._run_performance_test,
-                 width=150
-             ).pack(side="left", padx=(0, 10), pady=10)
-             
-             ctk.CTkButton(
-                 buttons_frame,
-                 text="❌ Fechar",
-                 command=perf_window.destroy,
-                 width=100
-             ).pack(side="right", pady=10)
-             
-         except Exception as e:
-             self.log_message(f"❌ Erro ao mostrar configuração de performance: {e}")
-             messagebox.showerror("Erro", f"Erro ao mostrar configuração de performance: {e}")
-             
-     def _calculate_performance_stats(self) -> str:
-         """Calcula estatísticas de performance"""
-         try:
-             stats = "=== ESTATÍSTICAS DE PERFORMANCE ===\n\n"
-             
-             # Informações do sistema
-             import platform
-             stats += f"Sistema: {platform.system()} {platform.release()}\n"
-             stats += f"Python: {platform.python_version()}\n"
-             
-             # Informações de memória
-             try:
-                 import psutil
-                 memory = psutil.virtual_memory()
-                 stats += f"Memória Total: {memory.total / (1024**3):.1f} GB\n"
-                 stats += f"Memória Disponível: {memory.available / (1024**3):.1f} GB\n"
-                 stats += f"Uso de Memória: {memory.percent}%\n"
-             except ImportError:
-                 stats += "Memória: psutil não instalado\n"
-             
-             # Informações de processamento
-             if hasattr(self, 'total_items') and self.total_items > 0:
-                 stats += f"\nItens para processar: {self.total_items}\n"
-                 
-                 # Estimar tempo baseado em configurações
-                 if self.total_items <= 50:
-                     estimated_time = self.total_items * 2  # 2 segundos por item
-                 elif self.total_items <= 200:
-                     estimated_time = self.total_items * 1.5  # 1.5 segundos por item
-                 elif self.total_items <= 500:
-                     estimated_time = self.total_items * 1.2  # 1.2 segundos por item
-                 else:
-                     estimated_time = self.total_items * 1.0  # 1 segundo por item
-                     
-                 stats += f"Tempo estimado: {estimated_time/60:.1f} minutos\n"
-                 
-                 # Configurações recomendadas
-                 stats += f"\nConfigurações recomendadas:\n"
-                 if self.total_items <= 50:
-                     stats += f"Threads: 4 (conservador)\n"
-                     stats += f"Lotes: 20\n"
-                 elif self.total_items <= 200:
-                     stats += f"Threads: 6 (balanceado)\n"
-                     stats += f"Lotes: 30\n"
-                 elif self.total_items <= 500:
-                     stats += f"Threads: 8 (otimizado)\n"
-                     stats += f"Lotes: 40\n"
-                 else:
-                     stats += f"Threads: 10 (máximo)\n"
-                     stats += f"Lotes: 50\n"
-             else:
-                 stats += "\nNenhum arquivo selecionado para análise.\n"
-             
-             # Status atual
-             stats += f"\nStatus atual:\n"
-             stats += f"Processando: {'Sim' if self.processing else 'Não'}\n"
-             if hasattr(self, 'processed_items') and hasattr(self, 'total_items'):
-                 if self.total_items > 0:
-                     progress = (self.processed_items / self.total_items) * 100
-                     stats += f"Progresso: {self.processed_items}/{self.total_items} ({progress:.1f}%)\n"
-             
-             return stats
-             
-         except Exception as e:
-             return f"Erro ao calcular estatísticas: {e}"
-             
-     def _update_performance_display(self, display_widget):
-         """Atualiza o display de performance"""
-         try:
-             stats_text = self._calculate_performance_stats()
-             display_widget.configure(state="normal")
-             display_widget.delete("1.0", "end")
-             display_widget.insert("1.0", stats_text)
-             display_widget.configure(state="disabled")
-             self.log_message("📊 Estatísticas de performance atualizadas")
-         except Exception as e:
-             self.log_message(f"❌ Erro ao atualizar display: {e}")
-             
-     def _run_performance_test(self):
-         """Executa teste de performance"""
-         try:
-             self.log_message("🧪 Iniciando teste de performance...")
-             
-             # Teste simples de conectividade
-             from src.pipedrive_client import PipedriveClient
-             pipedrive = PipedriveClient()
-             
-             start_time = time.time()
-             
-             # Teste de conexão
-             if pipedrive.test_connection():
-                 connection_time = time.time() - start_time
-                 
-                 # Teste de busca simples
-                 search_start = time.time()
-                 # Fazer uma busca simples para testar performance
-                 search_time = time.time() - search_start
-                 
-                 messagebox.showinfo(
-                     "Teste de Performance",
-                     f"✅ Teste concluído com sucesso!\n\n"
-                     f"Tempo de conexão: {connection_time:.2f}s\n"
-                     f"Tempo de busca: {search_time:.2f}s\n"
-                     f"Status: Conectado e funcionando\n\n"
-                     f"O sistema está pronto para processamento otimizado."
-                 )
-                 
-                 self.log_message(f"✅ Teste de performance concluído: conexão {connection_time:.2f}s")
-             else:
-                 messagebox.showerror("Teste de Performance", "❌ Falha na conexão com Pipedrive")
-                 self.log_message("❌ Teste de performance falhou: sem conexão")
-                 
-         except Exception as e:
-             error_msg = f"Erro no teste de performance: {e}"
-             self.log_message(f"❌ {error_msg}")
-             messagebox.showerror("Erro", error_msg)
-             
-     def run(self):
+                """
+            
+            config_display = ctk.CTkTextbox(config_frame, height=120)
+            config_display.pack(fill="x", padx=10, pady=(0, 10))
+            config_display.insert("1.0", config_text)
+            config_display.configure(state="disabled")
+            
+            # Estatísticas de performance
+            stats_frame = ctk.CTkFrame(main_frame)
+            stats_frame.pack(fill="both", expand=True, padx=10, pady=10)
+            
+            ctk.CTkLabel(stats_frame, text="📈 Estatísticas de Performance:", font=ctk.CTkFont(size=16, weight="bold")).pack(anchor="w", padx=10, pady=(10, 5))
+            
+            # Calcular estatísticas
+            stats_text = self._calculate_performance_stats()
+            
+            stats_display = ctk.CTkTextbox(stats_frame, height=200)
+            stats_display.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+            stats_display.insert("1.0", stats_text)
+            stats_display.configure(state="disabled")
+            
+            # Botões de ação
+            buttons_frame = ctk.CTkFrame(main_frame)
+            buttons_frame.pack(fill="x", padx=10, pady=10)
+            
+            ctk.CTkButton(
+                buttons_frame,
+                text="🔄 Atualizar Estatísticas",
+                command=lambda: self._update_performance_display(stats_display),
+                width=150
+            ).pack(side="left", padx=(0, 10), pady=10)
+            
+            ctk.CTkButton(
+                buttons_frame,
+                text="📊 Teste de Performance",
+                command=self._run_performance_test,
+                width=150
+            ).pack(side="left", padx=(0, 10), pady=10)
+            
+            ctk.CTkButton(
+                buttons_frame,
+                text="❌ Fechar",
+                command=perf_window.destroy,
+                width=100
+            ).pack(side="right", pady=10)
+            
+        except Exception as e:
+            self.log_message(f"❌ Erro ao mostrar configuração de performance: {e}")
+            messagebox.showerror("Erro", f"Erro ao mostrar configuração de performance: {e}")
+            
+    def _calculate_performance_stats(self) -> str:
+        """Calcula estatísticas de performance"""
+        try:
+            stats = "=== ESTATÍSTICAS DE PERFORMANCE ===\n\n"
+            
+            # Informações do sistema
+            import platform
+            stats += f"Sistema: {platform.system()} {platform.release()}\n"
+            stats += f"Python: {platform.python_version()}\n"
+            
+            # Informações de memória
+            try:
+                import psutil
+                memory = psutil.virtual_memory()
+                stats += f"Memória Total: {memory.total / (1024**3):.1f} GB\n"
+                stats += f"Memória Disponível: {memory.available / (1024**3):.1f} GB\n"
+                stats += f"Uso de Memória: {memory.percent}%\n"
+            except ImportError:
+                stats += "Memória: psutil não instalado\n"
+            
+            # Informações de processamento
+            if hasattr(self, 'total_items') and self.total_items > 0:
+                stats += f"\nItens para processar: {self.total_items}\n"
+                
+                # Estimar tempo baseado em configurações
+                if self.total_items <= 50:
+                    estimated_time = self.total_items * 2  # 2 segundos por item
+                elif self.total_items <= 200:
+                    estimated_time = self.total_items * 1.5  # 1.5 segundos por item
+                elif self.total_items <= 500:
+                    estimated_time = self.total_items * 1.2  # 1.2 segundos por item
+                else:
+                    estimated_time = self.total_items * 1.0  # 1 segundo por item
+                    
+                stats += f"Tempo estimado: {estimated_time/60:.1f} minutos\n"
+                
+                # Configurações recomendadas
+                stats += f"\nConfigurações recomendadas:\n"
+                if self.total_items <= 50:
+                    stats += f"Threads: 4 (conservador)\n"
+                    stats += f"Lotes: 20\n"
+                elif self.total_items <= 200:
+                    stats += f"Threads: 6 (balanceado)\n"
+                    stats += f"Lotes: 30\n"
+                elif self.total_items <= 500:
+                    stats += f"Threads: 8 (otimizado)\n"
+                    stats += f"Lotes: 40\n"
+                else:
+                    stats += f"Threads: 10 (máximo)\n"
+                    stats += f"Lotes: 50\n"
+            else:
+                stats += "\nNenhum arquivo selecionado para análise.\n"
+            
+            # Status atual
+            stats += f"\nStatus atual:\n"
+            stats += f"Processando: {'Sim' if self.processing else 'Não'}\n"
+            if hasattr(self, 'processed_items') and hasattr(self, 'total_items'):
+                if self.total_items > 0:
+                    progress = (self.processed_items / self.total_items) * 100
+                    stats += f"Progresso: {self.processed_items}/{self.total_items} ({progress:.1f}%)\n"
+            
+            return stats
+            
+        except Exception as e:
+            return f"Erro ao calcular estatísticas: {e}"
+            
+    def _update_performance_display(self, display_widget):
+        """Atualiza o display de performance"""
+        try:
+            stats_text = self._calculate_performance_stats()
+            display_widget.configure(state="normal")
+            display_widget.delete("1.0", "end")
+            display_widget.insert("1.0", stats_text)
+            display_widget.configure(state="disabled")
+            self.log_message("📊 Estatísticas de performance atualizadas")
+        except Exception as e:
+            self.log_message(f"❌ Erro ao atualizar display: {e}")
+            
+    def _run_performance_test(self):
+        """Executa teste de performance"""
+        try:
+            self.log_message("🧪 Iniciando teste de performance...")
+            
+            # Teste simples de conectividade
+            from pipedrive_client import PipedriveClient
+            pipedrive = PipedriveClient()
+            
+            start_time = time.time()
+            
+            # Teste de conexão
+            if pipedrive.test_connection():
+                connection_time = time.time() - start_time
+                
+                # Teste de busca simples
+                search_start = time.time()
+                # Fazer uma busca simples para testar performance
+                search_time = time.time() - search_start
+                
+                messagebox.showinfo(
+                    "Teste de Performance",
+                    f"✅ Teste concluído com sucesso!\n\n"
+                    f"Tempo de conexão: {connection_time:.2f}s\n"
+                    f"Tempo de busca: {search_time:.2f}s\n"
+                    f"Status: Conectado e funcionando\n\n"
+                    f"O sistema está pronto para processamento otimizado."
+                )
+                
+                self.log_message(f"✅ Teste de performance concluído: conexão {connection_time:.2f}s")
+            else:
+                messagebox.showerror("Teste de Performance", "❌ Falha na conexão com Pipedrive")
+                self.log_message("❌ Teste de performance falhou: sem conexão")
+                
+        except Exception as e:
+            error_msg = f"Erro no teste de performance: {e}"
+            self.log_message(f"❌ {error_msg}")
+            messagebox.showerror("Erro", error_msg)
+            
+    def run(self):
         """Executa a GUI"""
         self.root.mainloop()
 
